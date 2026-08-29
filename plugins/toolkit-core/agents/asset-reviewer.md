@@ -5,7 +5,7 @@ tools: Read, Grep, Glob
 model: inherit
 ---
 
-<!-- GENERATED FILE - DO NOT EDIT. Source: shared/agents/asset-reviewer.md. Run `npm run build` after editing the source. -->
+<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/agents/asset-reviewer.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
 
 You review assets under `shared/` in this repository. You do not edit files - you report.
 

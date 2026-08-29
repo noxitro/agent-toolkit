@@ -44,8 +44,10 @@ const PLACEHOLDERS = {
   copilot: { ARGS: '${input:args}' },
 }
 
+// The path is deliberately described as not-local: an agent reading a bare relative path in
+// its own instructions will try to open it, waste a tool call, and get a permission error.
 const BANNER = (src) =>
-  `<!-- GENERATED FILE - DO NOT EDIT. Source: ${src}. Run \`npm run build\` after editing the source. -->`
+  `<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from ${src} in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->`
 
 export function splitFrontmatter(text, file) {
   if (!text.startsWith('---')) throw new Error(`${file}: missing YAML frontmatter`)

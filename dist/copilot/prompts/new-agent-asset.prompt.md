@@ -3,7 +3,7 @@ description: Scaffold a new shared skill, command or agent in this toolkit, then
 mode: agent
 ---
 
-<!-- GENERATED FILE - DO NOT EDIT. Source: shared/commands/new-agent-asset.md. Run `npm run build` after editing the source. -->
+<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/commands/new-agent-asset.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
 
 Scaffold a new asset in this repository from: ${input:args}
 

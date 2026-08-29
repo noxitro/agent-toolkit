@@ -2,7 +2,7 @@
 description: Use when writing or reviewing a skill, command, agent or prompt that has to work on more than one agent harness (Claude Code, OpenCode, GitHub Copilot). Covers the shared frontmatter contract, the per-harness frontmatter that must stay in the harness block, argument placeholders, and the portability traps that make an asset silently do nothing on one harness while working on another.
 ---
 
-<!-- GENERATED FILE - DO NOT EDIT. Source: shared/skills/agent-asset-authoring/SKILL.md. Run `npm run build` after editing the source. -->
+<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/skills/agent-asset-authoring/SKILL.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
 
 # Authoring portable agent assets
 
