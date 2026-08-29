@@ -4,7 +4,7 @@ description: Use when writing or reviewing a skill, command, agent or prompt tha
 allowed-tools: Read, Grep, Glob
 ---
 
-<!-- GENERATED FILE - DO NOT EDIT. Source: shared/skills/agent-asset-authoring/SKILL.md. Run `npm run build` after editing the source. -->
+<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/skills/agent-asset-authoring/SKILL.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
 
 # Authoring portable agent assets
 
