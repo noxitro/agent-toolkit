@@ -1,96 +1,89 @@
-# Harness notes
+# ハーネスごとのメモ
 
-Where each harness looks for assets, and the traps that make a correct-looking asset do
-nothing. Version-dependent statements are dated; treat them as a snapshot rather than a
-guarantee.
+各ハーネスが資産をどこから探すか、そして正しく見える資産が何もしなくなる罠。バージョンに
+依存する記述には日付を付けてある。保証ではなくスナップショットとして読むこと。
 
 ## Claude Code
 
-**Install.** `/plugin marketplace add noxitro/agent-toolkit`, then
-`/plugin install toolkit-core@agent-toolkit`. The marketplace manifest lives at
-`.claude-plugin/marketplace.json` and points at `./plugins/toolkit-core`, whose own manifest
-is `plugins/toolkit-core/.claude-plugin/plugin.json`.
+**導入。** `/plugin marketplace add noxitro/agent-toolkit` のあと
+`/plugin install toolkit-core@agent-toolkit`。マーケットプレイスのマニフェストは
+`.claude-plugin/marketplace.json` にあり、`./plugins/toolkit-core` を指す。プラグイン自身の
+マニフェストは `plugins/toolkit-core/.claude-plugin/plugin.json`。
 
-**Discovery inside a plugin.** `skills/<name>/SKILL.md`, `commands/<name>.md`,
-`agents/<name>.md`. Skills are model-triggered from their `description`; commands are typed
-as `/<name>`; agents are dispatched as subagents.
+**プラグイン内での探索。** `skills/<name>/SKILL.md`、`commands/<name>.md`、`agents/<name>.md`。
+スキルは `description` を見てモデルが発動し、コマンドは `/<name>` と打って呼び、エージェントは
+サブエージェントとして起動される。
 
-**Notes.**
+**メモ。**
 
-- A skill's `name` must match its directory name, and the description is the only text
-  consulted when deciding whether to load it.
-- Hooks are harness-specific and are deliberately not part of the shared asset contract.
+- スキルの `name` はディレクトリ名と一致させる。読み込むかどうかの判断に使われる文章は
+  description だけ。
+- フックはハーネス固有なので、共有資産の契約には意図的に含めていない。
 
 ## OpenCode
 
-**Install.** Copy `dist/opencode/.` into `~/.config/opencode/` for every project, or into
-`.opencode/` inside one project. Both `agent/` and `command/` are read from there, and unlike
-Copilot prompt files the global location is genuinely workspace-independent.
+**導入。** `dist/opencode/.` を全プロジェクト向けなら `~/.config/opencode/` に、1 つのプロジェクト
+向けなら `.opencode/` にコピーする。`agent/` と `command/` の両方がそこから読まれる。Copilot の
+プロンプトファイルと違い、グローバルの置き場は本当にワークスペース非依存。
 
-**Notes.**
+**メモ。**
 
-- **There is no skill mechanism.** A skill targeting `opencode` is emitted as a global
-  command, which means it must be typed rather than being picked up by the model. If an
-  asset only earns its keep through automatic triggering, drop `opencode` from its `targets`.
-- **Permissions delete tools rather than narrow them.** A catch-all `deny` in an agent's
-  `permission` block removes the tool from that agent entirely, and `tools: { bash: true }`
-  does not restore it. The failure is silent — the agent keeps reporting success while never
-  having had the capability. Grant explicitly and confirm by observing a real tool call.
-- OpenCode also reads `~/.claude/CLAUDE.md` for Claude Code compatibility, so global Claude
-  instructions apply unless they are overridden in `~/.config/opencode/AGENTS.md`.
-- Paths outside the project are governed by the `external_directory` permission, which
-  defaults to `ask` — and a non-interactive `opencode run` auto-rejects it. An asset that
-  reads an absolute path outside the project will look like it is "ignoring instructions"
-  when it is actually being blocked.
-- On Windows, npm installs `opencode` as a PowerShell shim; launchers that need a real
-  executable should use `%APPDATA%\npm\opencode.cmd`.
+- **スキル機構が無い。** `opencode` を対象にしたスキルはグローバルなコマンドとして出力されるので、
+  モデルが拾うのではなく人が打つ必要がある。自動発動してこそ価値がある資産なら、`targets` から
+  `opencode` を外す。
+- **権限はツールを狭めるのではなく消す。** エージェントの `permission` ブロックに包括的な `deny` が
+  あると、そのツールはエージェントから丸ごと消え、`tools: { bash: true }` でも戻らない。失敗は
+  静かで、能力が無いままエージェントは成功を報告し続ける。明示的に許可し、実際のツール呼び出しを
+  観察して確かめる。
+- OpenCode は Claude Code 互換のために `~/.claude/CLAUDE.md` も読む。`~/.config/opencode/AGENTS.md`
+  で上書きしない限り、グローバルな Claude の指示が効く。
+- プロジェクト外のパスは `external_directory` 権限で制御され、既定は `ask`。非対話の `opencode run`
+  はこれを自動で拒否する。プロジェクト外の絶対パスを読む資産は、「指示を無視している」ように
+  見えて、実際には遮断されている。
+- Windows では npm が `opencode` を PowerShell のシムとして入れる。実行ファイルが必要な
+  ランチャーは `%APPDATA%\npm\opencode.cmd` を使う。
 
 ## GitHub Copilot
 
-**Install.** Copy `dist/copilot/.` into the `.github/` directory of the repository where the
-assets should be available.
+**導入。** `dist/copilot/.` を、資産を使いたいリポジトリの `.github/` にコピーする。
 
-| Asset | Repository location | User-level location |
+| 資産 | リポジトリ内の置き場 | ユーザーレベルの置き場 |
 | --- | --- | --- |
-| Skill | `.github/skills/<name>/SKILL.md` | `~/.copilot/skills/`, `~/.claude/skills/`, `~/.agents/skills/` |
-| Prompt | `.github/prompts/<name>.prompt.md` | VS Code: `%APPDATA%\Code\User\prompts\` |
-| Agent | `.github/agents/<name>.agent.md` | `%USERPROFILE%\.github\agents\` |
+| スキル | `.github/skills/<name>/SKILL.md` | `~/.copilot/skills/`、`~/.claude/skills/`、`~/.agents/skills/` |
+| プロンプト | `.github/prompts/<name>.prompt.md` | VS Code: `%APPDATA%\Code\User\prompts\` |
+| エージェント | `.github/agents/<name>.agent.md` | `%USERPROFILE%\.github\agents\` |
 
-**Notes.**
+**メモ。**
 
-- **Prompt files are workspace-scoped by default.** A prompt installed into one repository
-  does not appear in another. The user-level VS Code location fixes availability — but being
-  *discoverable* is separate from being *allowed to read* a path outside the workspace.
-- Copilot adopted the agentskills.io skill format (`SKILL.md` + frontmatter), which is why a
-  single source can serve both Copilot and Claude Code. The shared constraints —
-  `name` lowercase-hyphenated, ≤ 64 characters, matching the directory name; `description`
-  ≤ 1024 characters — are enforced by `npm run validate`.
-- Because `~/.claude/skills/` is one of the personal skill discovery locations, a skill
-  installed for Claude Code becomes discoverable by Copilot too. An asset that assumes a
-  particular harness is executing it needs to say so in its own text; the install location
-  will not enforce it.
-- Copilot CLI reads `CLAUDE.md` directly, so a repository already carrying Claude
-  instructions works without modification.
+- **プロンプトファイルは既定でワークスペース単位。** あるリポジトリに入れたプロンプトは別の
+  リポジトリでは出てこない。VS Code のユーザーレベルの場所に置けば見えるようになるが、*見つかる*
+  ことと、ワークスペース外のパスを*読んでよい*ことは別。
+- Copilot は agentskills.io のスキル形式(`SKILL.md` + frontmatter)を採用した。だから 1 つの
+  ソースで Copilot と Claude Code の両方に配れる。共通の制約(`name` は小文字ハイフン区切りで
+  64 文字以内かつディレクトリ名と一致、`description` は 1024 文字以内)は `npm run validate` が
+  強制する。
+- `~/.claude/skills/` が個人スキルの探索場所の 1 つなので、Claude Code 向けに入れたスキルは
+  Copilot からも見える。特定のハーネスで動く前提の資産は、自分の本文にそう書く必要がある。
+  置き場所は強制してくれない。
+- Copilot CLI は `CLAUDE.md` を直接読むので、Claude の指示を持つリポジトリはそのまま動く。
 
-### Visual Studio 2026 (not VS Code)
+### Visual Studio 2026(VS Code ではない)
 
-Same generated payload, different invocation and version floors (as of 2026-08; version
-dependent):
+生成物は同じで、呼び方とバージョンの下限が違う(2026-08 時点。バージョン依存):
 
-- Prompt files work from VS 2022 17.10+, but are invoked as `#prompt:<file>` or from the ➕
-  icon. `/` completion for custom prompts arrives in Visual Studio 2026.
-- Custom instructions are **off by default**: Tools → Options → GitHub → Copilot → Copilot
-  Chat → "Enable custom instructions…".
-- Custom agents (`.github/agents/*.agent.md`) require VS 2026 18.4+; Agent Skills require
-  VS 2026 18.5+.
-- Prompt-file discovery starts from the open repository's `.github/prompts`, so the
-  copy-into-`.github/` install is the supported path here.
+- プロンプトファイルは VS 2022 17.10 以降で動くが、`#prompt:<file>` か ➕ アイコンから呼ぶ。
+  カスタムプロンプトの `/` 補完は Visual Studio 2026 から。
+- カスタム指示は**既定で無効**: ツール → オプション → GitHub → Copilot → Copilot Chat →
+  「Enable custom instructions…」。
+- カスタムエージェント(`.github/agents/*.agent.md`)は VS 2026 18.4 以降、Agent Skills は
+  VS 2026 18.5 以降。
+- プロンプトファイルの探索は開いているリポジトリの `.github/prompts` から始まるので、`.github/`
+  へのコピー導入が公式の経路。
 
-## Cross-harness
+## ハーネス横断
 
-- **Hooks never travel.** Hook wiring is per-harness (Claude Code: `.claude/settings*.json`
-  in the working directory; Copilot CLI/cloud: `.github/hooks/<skill>.json`) and is not
-  generated from `shared/`.
-- **Do not stack assets speculatively.** Every installed description is in context on every
-  turn, so each additional asset dilutes trigger accuracy for all the others and widens the
-  surface that has to be reviewed.
+- **フックは配られない。** フックの配線はハーネスごと(Claude Code: 作業ディレクトリの
+  `.claude/settings*.json`、Copilot CLI/cloud: `.github/hooks/<skill>.json`)で、`shared/` からは
+  生成しない。
+- **資産を投機的に積まない。** 導入済みの description はすべて毎ターンのコンテキストに載る。
+  資産を 1 つ増やすたびに他の全資産の発動精度が薄まり、レビューすべき面も広がる。
