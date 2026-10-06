@@ -1,3 +1,5 @@
 node_modules/
 artifacts/
 lychee/
+# per-task working files of the m365-skill-pack skill (input/output bundles, reports)
+.m365/

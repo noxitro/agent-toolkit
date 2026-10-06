@@ -37,6 +37,15 @@ jobs:
       - name: Check generated output is up to date
         run: npm run build:check
 
+      # Unit tests for the scripts that ship inside skills (ZIP writer, bundle format,
+      # package validator, sandbox-side Python scripts).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Test skill scripts
+        run: npm test
+
   markdown:
     name: Markdown lint
     runs-on: ubuntu-latest

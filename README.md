@@ -130,12 +130,13 @@ name would collide in the OpenCode command directory.
 | `npm run build` | Regenerates every owned output directory from `shared/` |
 | `npm run build:check` | Fails if the committed output does not match the source (missing, stale or orphaned files) |
 | `npm run check` | `validate` + `build:check` — run this before committing |
+| `npm test` | Unit tests for scripts that ship inside skills (currently the `m365-skill-pack` ZIP writer, bundle format, package validator and sandbox-side Python scripts; Python tests skip when no interpreter is on PATH) |
 
 ## CI
 
 | Workflow | Trigger | What it enforces |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | push to `main`, PR | `npm run validate`, `npm run build:check`, markdownlint |
+| [`ci.yml`](.github/workflows/ci.yml) | push to `main`, PR | `npm run validate`, `npm run build:check`, `npm test`, markdownlint |
 | [`link-check.yml`](.github/workflows/link-check.yml) | PR touching Markdown, weekly | lychee link check; a scheduled failure opens an issue instead of failing the run |
 | [`release.yml`](.github/workflows/release.yml) | tag `v*` | tag matches `package.json`, full `npm run check`, publishes a release with `opencode.zip` / `copilot.zip` |
 
