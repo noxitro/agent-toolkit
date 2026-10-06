@@ -35,12 +35,16 @@ Store 版アプリや個人アカウントの copilot.microsoft.com)には EDP �
 
 ## 使い方
 
+以下のコマンドの `<skill-dir>` は、このスキルが置かれているディレクトリ。このリポジトリでは
+`shared/skills/m365-skill-pack`、Copilot 向け配布をコピーした先では `.github/skills/m365-skill-pack`、
+Claude Code のプラグインとして導入した場合はプラグインの `skills/m365-skill-pack`。
+
 ### 初回(1 回だけ)
 
 1. スキル ZIP を作る:
 
    ```bash
-   node shared/skills/m365-skill-pack/scripts/pack-skill.mjs shared/skills/m365-skill-pack/m365/skills/implement shared/skills/m365-skill-pack/m365/skills/audit shared/skills/m365-skill-pack/m365/skills/probe --from-template --out ./m365-zips
+   node <skill-dir>/scripts/pack-skill.mjs <skill-dir>/m365/skills/implement <skill-dir>/m365/skills/audit <skill-dir>/m365/skills/probe --from-template --out ./m365-zips
    ```
 
 2. `m365/SETUP.md` の手順で、Agent Builder に `impl-loop` と `auditor` を作り、
@@ -53,7 +57,7 @@ Store 版アプリや個人アカウントの copilot.microsoft.com)には EDP �
 2. 入力 ZIP を作る:
 
    ```bash
-   node shared/skills/m365-skill-pack/scripts/make-input.mjs --task .m365/<slug>/TASK.md
+   node <skill-dir>/scripts/make-input.mjs --task .m365/<slug>/TASK.md
    ```
 
    `.m365/<slug>/in-<slug>.zip` ができる。環境変数 `M365_DROP_DIR` に OneDrive の同期フォルダを
@@ -64,7 +68,7 @@ Store 版アプリや個人アカウントの copilot.microsoft.com)には EDP �
 4. 取り込む:
 
    ```bash
-   node shared/skills/m365-skill-pack/scripts/unpack-output.mjs .m365/<slug>/out-<slug>-r2.zip
+   node <skill-dir>/scripts/unpack-output.mjs .m365/<slug>/out-<slug>-r2.zip
    ```
 
    変更はワークツリーに展開され(コミットはしない)、`_m365/*` は `.m365/<slug>/reports/` に

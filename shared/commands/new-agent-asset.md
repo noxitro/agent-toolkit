@@ -32,7 +32,7 @@ ask for it before creating anything.
    nobody types. Put anything harness-specific under `harness.<name>.frontmatter`, never at
    the top level.
 4. Draft the body. Keep it about intent and quality bars rather than step-by-step procedure,
-   and use `{{ARGS}}` wherever the invocation arguments belong.
+   and use `{{literal:ARGS}}` wherever the invocation arguments belong.
 5. Run `npm run check` and commit both the source and the regenerated output together.
 
 Read `shared/skills/agent-asset-authoring/SKILL.md` first if the portability rules are not

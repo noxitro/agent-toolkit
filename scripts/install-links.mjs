@@ -13,7 +13,7 @@
 // Windows: symlink creation needs Developer Mode (or elevation). Directory links use the
 // "dir" symlink type rather than a junction so that files and directories are handled alike.
 
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, statSync, symlinkSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { ROOT } from './lib/toolkit.mjs'
@@ -77,7 +77,14 @@ for (const { path: rawPath, target: rawTarget } of links) {
     continue
   }
 
-  if (state !== 'missing') rmSync(linkPath, { recursive: state === 'not-a-link', force: true })
+  if (state === 'not-a-link') {
+    // A real file or directory at the link path is user data (or a typo in the config);
+    // never delete it on the user's behalf. Only symlinks are ours to replace.
+    console.log(`  x ${label}\n      a real ${lstatSync(linkPath).isDirectory() ? 'directory' : 'file'} exists here; move or remove it yourself, then rerun`)
+    problems++
+    continue
+  }
+  if (state === 'wrong-target') unlinkSync(linkPath)
   mkdirSync(dirname(linkPath), { recursive: true })
   try {
     symlinkSync(target, linkPath, type)
@@ -88,7 +95,7 @@ for (const { path: rawPath, target: rawTarget } of links) {
     problems++
     continue
   }
-  console.log(`  + ${label}\n      -> ${target}${state === 'not-a-link' ? '  (replaced a real ' + type + ')' : ''}`)
+  console.log(`  + ${label}\n      -> ${target}${state === 'wrong-target' ? '  (replaced a link to ' + current + ')' : ''}`)
 }
 
 if (problems) {

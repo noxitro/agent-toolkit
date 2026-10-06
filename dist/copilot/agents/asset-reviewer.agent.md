@@ -31,7 +31,7 @@ OpenCode agent whose `permission` block has a catch-all `deny` loses the tool en
 than having it narrowed, and fails silently; Copilot prompt files are workspace-scoped unless
 installed at the user level; hooks never travel between harnesses.
 
-**Body.** Arguments written as `${input:args}` rather than a harness-native placeholder; bundled
+**Body.** Arguments written as `{{ARGS}}` rather than a harness-native placeholder; bundled
 files referenced by relative path; instructions that state intent and quality bars rather
 than over-prescribed procedure.
 

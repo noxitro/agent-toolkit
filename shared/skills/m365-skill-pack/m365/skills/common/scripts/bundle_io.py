@@ -440,6 +440,16 @@ def read_bundle(bundle_path):
                     if line:
                         deletes.append(assert_safe_path(line))
         is_output = any(p in OUTPUT_MARKERS for p, _ in files)
+        file_paths = set(p for p, _ in files)
+        seen_del = set()
+        for d in deletes:
+            if is_protocol_path(d):
+                raise BundleError("deletion list names a protocol path: %s" % d)
+            if d in file_paths:
+                raise BundleError("%s is both delivered and listed for deletion" % d)
+            if d in seen_del:
+                raise BundleError("%s is listed for deletion twice" % d)
+            seen_del.add(d)
         return {"encoding": "zip", "header": {}, "files": files, "deletes": deletes,
                 "skipped": [], "detected_kind": "output" if is_output else "input"}
     try:
@@ -465,9 +475,20 @@ def cmd_unpack(args):
 
     repo_files = [(p, d) for p, d in bundle["files"] if not is_protocol_path(p)]
     proto_files = [(p, d) for p, d in bundle["files"] if is_protocol_path(p)]
-    if any(p == MANIFEST_PATH for p, _ in proto_files):
-        sys.stderr.write("warning: the bundle carries %s; it is replaced by a fresh manifest\n" % MANIFEST_PATH)
-        proto_files = [(p, d) for p, d in proto_files if p != MANIFEST_PATH]
+    # A full output bundle (pack --full) carries the input manifest so that an independent
+    # audit can tell real changes from untouched files. Anything else is replaced.
+    carried_manifest = None
+    for p, d in proto_files:
+        if p == MANIFEST_PATH:
+            try:
+                m = json.loads(d.decode("utf-8"))
+                if isinstance(m, dict) and m.get("schema") == MANIFEST_SCHEMA and isinstance(m.get("files"), dict):
+                    carried_manifest = m
+            except (ValueError, UnicodeDecodeError):
+                pass
+            if carried_manifest is None:
+                sys.stderr.write("warning: the bundle carries an unreadable %s; it is replaced\n" % MANIFEST_PATH)
+    proto_files = [(p, d) for p, d in proto_files if p != MANIFEST_PATH]
     renamed_audit = False
     if kind == "output" and any(p == AUDIT_PATH for p, _ in proto_files):
         # The implementer's self-audit stays readable, but a standalone audit of this
@@ -498,8 +519,13 @@ def cmd_unpack(args):
     if task is None:
         task = bundle["header"].get("task") or None
 
-    manifest = {"schema": MANIFEST_SCHEMA, "task": task,
-                "files": {} if kind == "output" else dict(sorted(hashes.items()))}
+    if kind == "output":
+        base = dict(sorted(carried_manifest["files"].items())) if carried_manifest else {}
+        if task is None and carried_manifest:
+            task = carried_manifest.get("task") or None
+    else:
+        base = dict(sorted(hashes.items()))
+    manifest = {"schema": MANIFEST_SCHEMA, "task": task, "files": base}
     write_json(native(workdir, MANIFEST_PATH), manifest)
 
     proto_present = sorted(p for p, _ in proto_files)
@@ -517,8 +543,10 @@ def cmd_unpack(args):
               % ", ".join("%s (%s)" % s for s in bundle["skipped"]))
     if renamed_audit:
         print("  %s from the bundle saved as %s; a new audit report starts fresh" % (AUDIT_PATH, IMPL_AUDIT_PATH))
-    if kind == "output":
-        print("  manifest: empty (output bundle) - every repository file above counts as a change")
+    if kind == "output" and carried_manifest:
+        print("  manifest: carried from the input (%d files) - status shows the real changes" % len(base))
+    elif kind == "output":
+        print("  manifest: empty (output bundle without a manifest) - every repository file above counts as a change")
     else:
         print("  manifest: %s (%d files)" % (MANIFEST_PATH, len(hashes)))
     if task is None:
@@ -568,12 +596,20 @@ def cmd_pack(args):
         deletes = []
     else:
         status = compute_status(workdir, manifest)
-        repo = sorted(p for p in status["added"] + status["modified"] if p != out_rel)
+        deletes = status["deleted"]
+        if args.full:
+            # Everything that exists now: the untouched files plus additions, so that an
+            # independent auditor sees callers and tests, not just the delta. The input
+            # manifest rides along so the auditor can still tell what changed.
+            present = (set(manifest["files"]) - set(deletes)) | set(status["added"])
+            repo = sorted(p for p in present if p != out_rel)
+        else:
+            repo = sorted(p for p in status["added"] + status["modified"] if p != out_rel)
         proto = [PROTOCOL_PREFIX + p for p in walk_files(native(workdir, PROTOCOL_DIR))] \
             if os.path.isdir(native(workdir, PROTOCOL_DIR)) else []
-        proto = [p for p in proto if p not in PACK_EXCLUDE and p != out_rel]
+        exclude = tuple(p for p in PACK_EXCLUDE if not (args.full and p == MANIFEST_PATH))
+        proto = [p for p in proto if p not in exclude and p != out_rel]
         paths = repo + proto
-        deletes = status["deleted"]
         if AUDIT_PATH not in proto:
             sys.stderr.write("warning: no %s; the local unpacker will report no verdict\n" % AUDIT_PATH)
 
@@ -634,6 +670,8 @@ def build_parser():
     p.add_argument("workdir")
     p.add_argument("out")
     p.add_argument("--kind", choices=["output", "audit"], default="output")
+    p.add_argument("--full", action="store_true",
+                   help="pack every repository file (not only changes) plus the input manifest, for an independent audit")
     p.add_argument("--round", type=int, default=None)
     p.add_argument("--task", default=None)
     p.add_argument("--store", action="store_true", help="ZIP without compression")

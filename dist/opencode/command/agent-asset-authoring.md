@@ -43,8 +43,10 @@ where the build copies it verbatim into the emitted file.
 3. **Do not stack assets speculatively.** Every installed description is held in context on
    every turn, so each extra asset dilutes trigger accuracy for all the others. Ship what is
    actually used.
-4. **Write arguments as `$ARGUMENTS`.** The build substitutes the native placeholder per
-   harness (`$ARGUMENTS`, or `${input:args}` for Copilot prompt files).
+4. **Write arguments as `{{ARGS}}`.** The build substitutes the native placeholder per
+   harness (`$ARGUMENTS`, or `${input:args}` for Copilot prompt files). Text that has to
+   *mention* the token - like this sentence - writes `{{literal:` + `ARGS}}`, which the build
+   emits as the literal token on every harness.
 5. **Reference bundled files by relative path.** Extra files in a skill directory
    (`references/`, `scripts/`) are copied verbatim next to `SKILL.md`, so a relative link
    resolves identically everywhere.

@@ -8,7 +8,7 @@
 // Exit code: 0 = PASS, 2 = FAIL, 1 = error or no usable AUDIT.md.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { parseArgs, usage } from './lib/args.mjs'
 import { PROTOCOL_PREFIX, assertSafePath, isGitSegment, isProtocolPath, isSafeSlug, matchLineEndings, parseAuditSummary, parseBundle } from './lib/bundle.mjs'
@@ -57,6 +57,18 @@ if (isZip) {
   files = b.files.map((f) => ({ path: f.path, data: Buffer.from(f.content, 'utf8'), text: true }))
   deletes = b.deletes
 }
+// A deletion list that contradicts the file list, repeats itself, or names protocol
+// files is a malformed bundle; refuse it before touching anything.
+{
+  const filePaths = new Set(files.map((f) => f.path))
+  const seenDel = new Set()
+  for (const d of deletes) {
+    if (isProtocolPath(d)) throw new Error(`bundle: deletion list names a protocol path: ${d}`)
+    if (filePaths.has(d)) throw new Error(`bundle: ${d} is both delivered and listed for deletion`)
+    if (seenDel.has(d)) throw new Error(`bundle: ${d} is listed for deletion twice`)
+    seenDel.add(d)
+  }
+}
 const taskFile = files.find((f) => f.path === `${PROTOCOL_PREFIX}TASK.md`)
 if (!task && taskFile) task = /^# TASK\s+(\S+)/m.exec(taskFile.data.toString('utf8'))?.[1] ?? null
 const auditFile = files.find((f) => f.path === `${PROTOCOL_PREFIX}AUDIT.md`)
@@ -73,7 +85,28 @@ function insideDir(base, abs) {
   const rel = relative(base, abs)
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(/[\\/]/).some(isGitSegment)
 }
-const insideRepo = (abs) => insideDir(repo, abs)
+
+/**
+ * Lexical containment is not enough once a directory inside the repository is a symlink
+ * to somewhere else: resolve the nearest existing ancestor and require its real path to
+ * stay inside the real base. A path whose final component is itself a symlink is refused.
+ */
+function realInside(base, abs) {
+  if (!insideDir(base, abs)) return false
+  let probe = abs
+  while (!existsSync(probe)) probe = dirname(probe)
+  try {
+    if (lstatSync(probe).isSymbolicLink() && probe === abs) return false
+  } catch {
+    return false
+  }
+  const realBase = realpathSync.native(base)
+  const realProbe = realpathSync.native(probe)
+  if (realProbe === realBase) return true
+  const rel = relative(realBase, realProbe)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(/[\\/]/).some(isGitSegment)
+}
+const insideRepo = (abs) => realInside(repo, abs)
 
 const reportsDir = resolve(opts.reports ?? join(repo, '.m365', task, 'reports'))
 if (!opts.reports && !insideDir(join(repo, '.m365'), reportsDir)) throw new Error(`refusing to write reports outside ${join(repo, '.m365')}: ${reportsDir}`)
@@ -89,7 +122,8 @@ const reports = []
 for (const f of files) {
   if (isProtocolPath(f.path)) {
     const dest = resolve(reportsDir, f.path.slice(PROTOCOL_PREFIX.length))
-    if (!insideDir(reportsDir, dest)) throw new Error(`refusing to write outside the reports directory: ${f.path}`)
+    if (!opts['dry-run']) mkdirSync(reportsDir, { recursive: true })
+    if (!(opts['dry-run'] ? insideDir(reportsDir, dest) : realInside(reportsDir, dest))) throw new Error(`refusing to write outside the reports directory: ${f.path}`)
     reports.push(f.path)
     if (!opts['dry-run']) {
       mkdirSync(dirname(dest), { recursive: true })

@@ -94,7 +94,9 @@ budget is spent, and return exactly one output bundle.
 
 ## Step 6: Pack and return
 - Goal: deliver.
-- Action: `bundle_io.py pack <workdir> out-<task>-r<N>.zip`. Return the file.
+- Action: `bundle_io.py pack <workdir> out-<task>-r<N>.zip --full`. Return the file.
+  (`--full` ships every file plus the input manifest, so the independent auditor sees
+  callers and tests, not only the delta.)
 - Transition: end.
 
 # OUTPUT CONTRACT

@@ -59,8 +59,10 @@ contains only `_m365/AUDIT.md`.
 ## Step 1: Unpack
 - Goal: have the changed files, `_m365/TASK.md`, `_m365/ROUNDS.md` and the
   implementer's `_m365/AUDIT.md` in a working directory.
-- Action: `audit` skill, `bundle_io.py unpack`. Read the task and the round log.
-  Treat the implementer's audit as a claim to verify, not as evidence.
+- Action: `audit` skill, `bundle_io.py unpack`. The bundle is a full snapshot with the
+  input manifest, so `status` shows the real changes while callers and tests are
+  available to read. Read the task and the round log. Treat the implementer's audit as
+  a claim to verify, not as evidence.
 - Transition: go to Step 2.
 
 ## Step 2: Deterministic checks

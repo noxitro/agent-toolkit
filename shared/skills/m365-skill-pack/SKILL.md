@@ -30,7 +30,8 @@ whenever the user proposes attaching a bundle to anything other than that tenant
   sheets (name, description, instructions, starter prompts, skills to attach).
 - `m365/skills/{implement,audit,probe}/` - the skill sources, packaged with
   `scripts/pack-skill.mjs --from-template`. They are project-independent; project
-  conventions travel inside each input bundle.
+  conventions travel inside each input bundle. `<skill-dir>` below is wherever this
+  skill is installed (the directory holding this SKILL.md).
 - `references/` - the documented limits (`m365-constraints.md`,
   `agent-builder-rules.md`), the bundle format and the loop protocol. Treat the
   "Measured" tables there as the current truth about the sandbox; if they are empty,

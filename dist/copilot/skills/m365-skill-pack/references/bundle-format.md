@@ -27,7 +27,7 @@ Three implementations must agree with this document: `scripts/lib/bundle.mjs` an
 | --- | --- | --- |
 | `_m365/TASK.md` | local harness | the task contract (see `loop-protocol.md`) |
 | `_m365/CONVENTIONS/<file>` | `make-input.mjs` | copies of `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` when present |
-| `_m365/manifest.json` | `bundle_io.py unpack` | `{ "files": { "<path>": "<sha256>" } }` of the input, used to detect changes |
+| `_m365/manifest.json` | `bundle_io.py unpack` | `{ "files": { "<path>": "<sha256>" } }` of the input, used to detect changes; carried into a `--full` output bundle |
 | `_m365/DELETED.txt` | implement skill | paths removed during the task, one per line (ZIP encoding only) |
 | `_m365/state.json` | `run_round.py` | round counter and history (never packed) |
 | `_m365/checks.json` | `audit_checks.py check` | the last deterministic check results |
@@ -41,8 +41,13 @@ An unpacker routes every `_m365/` entry to the reports directory, never into the
 
 - Entry names follow the path model. No directory entries, no absolute names.
 - Method 0 (store) or 8 (deflate). No encryption, no ZIP64, no data descriptors.
-- An output ZIP contains **only changed, added and protocol files**. Unchanged files are
-  omitted. A deletion is expressed by listing the path in `_m365/DELETED.txt`.
+- An output ZIP written with `pack --full` (the default in the agent instructions)
+  contains **every repository file** plus the protocol files and the input
+  `_m365/manifest.json`, so an independent auditor can tell real changes from untouched
+  files while still reading callers and tests. Without `--full` only changed, added and
+  protocol files ship. A deletion is expressed by listing the path in `_m365/DELETED.txt`;
+  a path may not appear both as a file and in that list, and protocol paths may not be
+  listed there.
 - Bytes are carried as-is; the ZIP packer does not touch line endings.
 
 ## Markdown encoding
