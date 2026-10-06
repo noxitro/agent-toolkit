@@ -69,7 +69,7 @@ export function extOf(name) {
 }
 
 /** Convert a glob (`**`, `*`, `?`) into a RegExp over forward-slash paths. */
-export function globToRegExp(glob) {
+export function globToRegExp(glob, flags = '') {
   let re = ''
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i]
@@ -82,8 +82,14 @@ export function globToRegExp(glob) {
     } else if (c === '?') re += '[^/]'
     else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
   }
-  return new RegExp(`^${re}$`)
+  return new RegExp(`^${re}$`, flags)
 }
+
+/**
+ * The default exclusions guard secrets, so they match regardless of letter case
+ * (`.ENV`, `Server.PEM`). User-supplied globs keep exact-case semantics.
+ */
+export const INPUT_EXCLUDE_RES = INPUT_EXCLUDES.map((g) => globToRegExp(g, 'i'))
 
 export function matchesAny(path, globs) {
   return globs.some((g) => (g instanceof RegExp ? g : globToRegExp(g)).test(path))
@@ -243,7 +249,9 @@ export function validateSkillDir(dir, opts = {}) {
         name = fm.name
         description = fm.description
         if (!name) problems.push(`${label}: ${rel} frontmatter needs a non-empty \`name\``)
-        else if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) warnings.push(`${label}: \`name: ${name}\` is not lowercase-hyphenated; Copilot Studio requires that form`)
+        // The name becomes the zip file name and the --wrap prefix, so anything but a plain
+        // slug is an error, not a style warning.
+        else if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) || name.length > 64) problems.push(`${label}: \`name: ${name}\` must be lowercase words joined by single hyphens (max 64 characters)`)
         if (!description) problems.push(`${label}: ${rel} frontmatter needs a non-empty \`description\``)
         const chars = [...body].length
         if (chars >= LIMITS.skillInstructionChars) problems.push(`${label}: ${rel} instructions are ${chars} characters (must be under ${LIMITS.skillInstructionChars})`)

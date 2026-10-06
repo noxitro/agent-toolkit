@@ -63,8 +63,9 @@ One paragraph. What must be true when the task is done.
   `audit_checks.py`, then one judgement per AC) and records the verdict.
 - The loop continues only while the verdict is FAIL and the round is below
   `Max rounds`. It stops on PASS or when the rounds are exhausted.
-- The output bundle is produced **once**, after the last round. The agent does not ask
-  the user anything in between.
+- The output bundle is produced **once**, after the last round, with `pack --full` so it
+  carries the whole working tree and the input manifest. The agent does not ask the user
+  anything in between.
 
 ## Verdict
 

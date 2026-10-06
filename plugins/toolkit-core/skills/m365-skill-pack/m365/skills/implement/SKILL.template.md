@@ -17,8 +17,9 @@ All scripts are Python 3, standard library only, and run in the sandbox.
 - `scripts/bundle_io.py unpack <bundle> <workdir>` - extract the bundle and write
   `_m365/manifest.json` (hashes of the original files).
 - `scripts/bundle_io.py status <workdir>` - added / modified / deleted since unpack.
-- `scripts/bundle_io.py pack <workdir> <out.zip>` - write the output bundle holding only
-  changed files, deletions and the `_m365/` protocol files.
+- `scripts/bundle_io.py pack <workdir> <out.zip> --full` - write the output bundle: every
+  repository file, deletions, the `_m365/` protocol files and the input manifest (so an
+  auditor can still tell what changed). Without `--full` only the changed files ship.
 - `scripts/run_round.py start <workdir>` - begin a round (refuses past max rounds).
 - `scripts/run_round.py finish <workdir> --verdict PASS|FAIL [--notes ...]` - record the
   round in `_m365/ROUNDS.md` and say whether to continue.
@@ -43,14 +44,14 @@ Read `resources/bundle-format.md` if you need the exact file format.
    (the agent instructions say whether it is). Record the verdict with
    `run_round.py finish`. On `"next": "continue"`, start the next round and fix exactly
    what the audit flagged. On `"next": "stop"`, pack.
-6. Pack once, after the last round: `bundle_io.py pack <workdir> out-<task>-r<N>.zip`
+6. Pack once, after the last round: `bundle_io.py pack <workdir> out-<task>-r<N>.zip --full`
    where N is the final round. Return that file to the user. Do not return partial
    bundles between rounds.
 
 ## Quality bar
 
-- The output bundle contains only what changed, plus `_m365/ROUNDS.md` and, when the
-  audit skill ran, `_m365/AUDIT.md`.
+- The output bundle contains the full working tree (`--full`), `_m365/ROUNDS.md` and, when
+  the audit skill ran, `_m365/AUDIT.md`; the local tooling reports unchanged files as such.
 - Round notes say what was changed and why, in a few lines. No pasted diffs.
 - A change outside scope, a dropped constraint, or a forbidden pattern is a failure even
   when the acceptance criteria pass.

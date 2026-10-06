@@ -18,12 +18,13 @@ Copilot(エンタープライズ データ保護あり)専用**。無料の Copi
   登録されている**ことと、Microsoft 365 Copilot ライセンスまたは従量課金が必要
   (公式: `references/agent-builder-rules.md` の出典)。「構成」タブに「スキル」の
   節が無ければ、この前提を満たしていない。
-- ローカルで `node scripts/pack-skill.mjs` が動く(Node 20 以上)。
+- ローカルで Node 20 以上が動く。以下の `<skill-dir>` はこのスキルの置き場所(このリポジトリでは
+  `shared/skills/m365-skill-pack`、Copilot 向け配布をコピーした先では `.github/skills/m365-skill-pack`)。
 
 ## 1. スキル ZIP を作る(ローカル)
 
 ```bash
-node shared/skills/m365-skill-pack/scripts/pack-skill.mjs shared/skills/m365-skill-pack/m365/skills/implement shared/skills/m365-skill-pack/m365/skills/audit shared/skills/m365-skill-pack/m365/skills/probe --from-template --out ./m365-zips
+node <skill-dir>/scripts/pack-skill.mjs <skill-dir>/m365/skills/implement <skill-dir>/m365/skills/audit <skill-dir>/m365/skills/probe --from-template --out ./m365-zips
 ```
 
 `implement.zip` / `audit.zip` / `probe.zip` ができる。検証エラーが出たら中身を直してから

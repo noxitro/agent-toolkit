@@ -185,9 +185,13 @@ export function validateAsset(asset) {
   return problems
 }
 
+// `{{ARGS}}` becomes the harness-native placeholder. Text that has to *talk about* the
+// canonical token (authoring guidance, reviewers) writes `{{literal:ARGS}}`, which comes
+// out as the literal `{{ARGS}}` on every harness.
 function renderBody(body, target) {
   let out = body
   for (const [token, value] of Object.entries(PLACEHOLDERS[target])) out = out.replaceAll(`{{${token}}}`, value)
+  out = out.replace(/\{\{literal:([A-Z_]+)\}\}/g, '{{$1}}')
   return out.trim() + '\n'
 }
 

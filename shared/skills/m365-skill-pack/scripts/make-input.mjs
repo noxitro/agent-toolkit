@@ -15,7 +15,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import { basename, join, relative, resolve, sep } from 'node:path'
 import { parseArgs, usage } from './lib/args.mjs'
 import { formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
-import { CONVENTION_FILES, INPUT_EXCLUDES, globToRegExp } from './lib/m365-rules.mjs'
+import { CONVENTION_FILES, INPUT_EXCLUDE_RES, globToRegExp } from './lib/m365-rules.mjs'
 import { writeZip } from './lib/zip.mjs'
 
 const HELP = `
@@ -86,7 +86,8 @@ function walkFiles(dir, base, out = []) {
 }
 
 let candidates = gitFiles() ?? walkFiles(repo, repo)
-const excludes = [...INPUT_EXCLUDES, ...opts.exclude].map(globToRegExp)
+// Defaults are case-insensitive (they guard secrets); user globs are exact-case.
+const excludes = [...INPUT_EXCLUDE_RES, ...opts.exclude.map((g) => globToRegExp(g))]
 candidates = candidates.filter((p) => !excludes.some((re) => re.test(p)))
 
 if (positionals.length) {
