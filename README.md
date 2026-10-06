@@ -1,54 +1,54 @@
 # agent-toolkit
 
-Skills, agents, commands and workflows for coding agents — written once, shipped to
-**Claude Code**, **OpenCode** and **GitHub Copilot** (VS Code, CLI, Visual Studio 2026).
+コーディングエージェント向けのスキル・エージェント・コマンド・ワークフローを **1 回書いて**、
+**Claude Code**・**OpenCode**・**GitHub Copilot**(VS Code / CLI / Visual Studio 2026)へ配るための
+リポジトリ。
 
-Each harness only discovers assets at its own fixed paths, so "shared" cannot mean one
-physical directory that all three read. Instead every asset is authored once under
-[`shared/`](shared/) and a build step generates the per-harness shape. The generated output
-is committed, so users install through each harness's normal path with no build step, and CI
-fails if it ever drifts from the source.
+各ハーネスは自分の決まったパスにある資産しか見つけないので、「共有」を 3 つが同時に読む
+1 つの物理ディレクトリで実現することはできない。代わりに、すべての資産を [`shared/`](shared/) の
+下に 1 回だけ書き、ビルドがハーネスごとの形に生成する。生成物はコミットするので、利用者は
+ビルド無しに各ハーネスの通常の方法で導入でき、ソースと生成物がずれれば CI が落ちる。
 
-## Supported harnesses
+## 対応ハーネス
 
-| Role | Claude Code | OpenCode | GitHub Copilot |
+| 役割 | Claude Code | OpenCode | GitHub Copilot |
 | --- | --- | --- | --- |
-| Skill | `skills/<name>/SKILL.md` | *(no skill mechanism — emitted as a command)* | `.github/skills/<name>/SKILL.md` |
-| Command / prompt | `commands/<name>.md` | `command/<name>.md` | `.github/prompts/<name>.prompt.md` |
-| Subagent | `agents/<name>.md` | `agent/<name>.md` | `.github/agents/<name>.agent.md` |
-| Distribution | plugin marketplace | copy into `~/.config/opencode/` | copy into `.github/` |
+| スキル | `skills/<name>/SKILL.md` | *(スキル機構が無いのでコマンドとして出力)* | `.github/skills/<name>/SKILL.md` |
+| コマンド / プロンプト | `commands/<name>.md` | `command/<name>.md` | `.github/prompts/<name>.prompt.md` |
+| サブエージェント | `agents/<name>.md` | `agent/<name>.md` | `.github/agents/<name>.agent.md` |
+| 配布 | プラグイン マーケットプレイス | `~/.config/opencode/` へコピー | `.github/` へコピー |
 
-See [docs/harness-notes.md](docs/harness-notes.md) for the per-harness details, version
-requirements and known traps.
+ハーネスごとの詳細、バージョン要件、既知の罠は [docs/harness-notes.md](docs/harness-notes.md) を
+参照。
 
-## Layout
+## 構成
 
 ```text
-.claude-plugin/marketplace.json   Claude Code marketplace manifest
-shared/                           SINGLE SOURCE — edit only here
-  skills/<name>/SKILL.md          (plus optional references/, scripts/ copied verbatim)
+.claude-plugin/marketplace.json   Claude Code のマーケットプレイス マニフェスト
+shared/                           単一ソース — 編集するのはここだけ
+  skills/<name>/SKILL.md          (任意で references/ や scripts/ を同梱。そのままコピーされる)
   commands/<name>.md
   agents/<name>.md
-plugins/toolkit-core/             GENERATED — Claude Code plugin payload
-  .claude-plugin/plugin.json      (hand-written)
-  skills/ commands/ agents/       (generated)
-dist/                             GENERATED — copy-in payloads
+plugins/toolkit-core/             生成物 — Claude Code プラグインの中身
+  .claude-plugin/plugin.json      (手書き)
+  skills/ commands/ agents/       (生成)
+dist/                             生成物 — コピーして使う配布物
   opencode/{agent,command}/
   copilot/{skills,prompts,agents}/
-scripts/                          build + validate
-toolkit.config.json               per-repository build settings
-docs/                             per-harness notes
+scripts/                          ビルドと検証
+tests/                            スキルに同梱するスクリプトの単体テスト
+toolkit.config.json               リポジトリごとのビルド設定
+docs/                             ハーネスごとのメモ
 ```
 
-`scripts/` and `toolkit.config.json` are written so the same toolchain can be dropped into a
-sibling repository (an incubation repo for assets that are not ready to publish yet) without
-edits — only `claudePlugin` differs. Keeping the toolchain byte-identical is what makes
-graduating an asset a plain file move plus a rebuild.
+`scripts/` と `toolkit.config.json` は、同じツールチェーンを姉妹リポジトリ(公開前の資産を
+育てる incubation リポジトリ)にそのまま置けるように書いてある。違うのは `claudePlugin` だけ。
+ツールチェーンをバイト単位で同一に保つことで、資産の昇格が「ファイル移動 + 再ビルド」で済む。
 
-Everything under `dist/` and `plugins/*/{skills,commands,agents}` is regenerated from
-scratch on every build. Do not edit it — edits are wiped and CI rejects them.
+`dist/` と `plugins/*/{skills,commands,agents}` の中身はビルドのたびにゼロから作り直される。
+直接編集しないこと。編集しても消され、CI が拒否する。
 
-## Install
+## 導入
 
 ### Claude Code
 
@@ -62,91 +62,100 @@ scratch on every build. Do not edit it — edits are wiped and CI rejects them.
 
 ### OpenCode
 
-Copy the payload into the global config directory (all projects) or into `.opencode/` in one
-project. OpenCode reads both `agent/` and `command/` from there.
+配布物をグローバル設定ディレクトリ(全プロジェクト)か、1 つのプロジェクトの `.opencode/` に
+コピーする。OpenCode はそこから `agent/` と `command/` の両方を読む。
 
 ```bash
 cp -r dist/opencode/. ~/.config/opencode/
 ```
 
-### GitHub Copilot (VS Code / CLI)
+### GitHub Copilot(VS Code / CLI)
 
-Copy the payload into the repository where you want it available:
+使いたいリポジトリに配布物をコピーする。
 
 ```bash
 cp -r dist/copilot/. .github/
 ```
 
-For availability across every workspace instead of one repository, put the prompt files in
-the user-level location — see [docs/harness-notes.md](docs/harness-notes.md).
+1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
+場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
 
-## Authoring an asset
+## 資産の書き方
 
-Create the source under `shared/`, then run `npm run check` and commit the source together
-with the regenerated output.
+`shared/` の下にソースを作り、`npm run check` を通してから、ソースと再生成した出力を一緒に
+コミットする。
 
 ```yaml
 ---
-name: my-asset            # lowercase words joined by hyphens, ≤ 64 chars, matches the
-                          # directory name (skills) or file name (commands, agents)
-description: Use when …   # ≤ 1024 chars; this is the trigger text the harness matches on
+name: my-asset            # 小文字の単語をハイフンでつなぐ。64 文字以内。ディレクトリ名(スキル)
+                          # またはファイル名(コマンド・エージェント)と一致させる
+description: Use when …   # 1024 文字以内。ハーネスが発動判断に使うトリガー文
 targets: [claude, opencode, copilot]
-harness:                  # optional per-harness escape hatch
+harness:                  # 任意。ハーネスごとの逃げ道
   claude:
-    frontmatter:          # merged verbatim into the generated frontmatter
+    frontmatter:          # 生成する frontmatter にそのまま混ぜられる
       allowed-tools: Read, Grep
   opencode:
     frontmatter:
       mode: subagent
   copilot:
-    skip: true            # drop this asset from one harness without forking it
+    skip: true            # fork せずに、あるハーネスだけからこの資産を外す
 ---
 ```
 
-Only `name`, `description` and `targets` are portable. Everything else — tool allowlists,
-model pins, permissions, `mode` — is harness-specific and belongs in
-`harness.<name>.frontmatter`. Write invocation arguments as `{{ARGS}}`; the build substitutes
-the native placeholder (`$ARGUMENTS`, or `${input:args}` for Copilot prompt files).
+可搬なのは `name`・`description`・`targets` だけ。それ以外(ツールの許可リスト、モデル固定、
+権限、`mode`)はハーネス固有で、`harness.<name>.frontmatter` に置く。呼び出し引数は `{{ARGS}}` と
+書く。ビルドがハーネス固有のプレースホルダ(`$ARGUMENTS`、Copilot のプロンプトファイルでは
+`${input:args}`)に置き換える。
 
-The `agent-asset-authoring` skill in this repo carries the same contract plus the
-portability traps, so the agent you are working with can load it directly.
+同じ規約と可搬性の罠は、このリポジトリの `agent-asset-authoring` スキルにも書いてあるので、
+作業中のエージェントに直接読ませられる。
 
-### How each source maps to output
+### ソースと出力の対応
 
-| Source | `claude` | `opencode` | `copilot` |
+| ソース | `claude` | `opencode` | `copilot` |
 | --- | --- | --- | --- |
 | `shared/skills/x/SKILL.md` | `plugins/toolkit-core/skills/x/SKILL.md` | `dist/opencode/command/x.md` | `dist/copilot/skills/x/SKILL.md` |
 | `shared/commands/x.md` | `plugins/toolkit-core/commands/x.md` | `dist/opencode/command/x.md` | `dist/copilot/prompts/x.prompt.md` |
 | `shared/agents/x.md` | `plugins/toolkit-core/agents/x.md` | `dist/opencode/agent/x.md` | `dist/copilot/agents/x.agent.md` |
 
-Asset names are unique across all three kinds, because a skill and a command with the same
-name would collide in the OpenCode command directory.
+資産名は 3 種類をまたいで一意にする。スキルとコマンドが同名だと、OpenCode の command
+ディレクトリで衝突するため。
 
-## Scripts
+## 収録している資産
 
-| Command | What it does |
+| 資産 | 種類 | 内容 |
+| --- | --- | --- |
+| `agent-asset-authoring` | スキル | 複数ハーネスで動く資産の書き方(共有 frontmatter の契約、ハーネス固有の設定の置き場、可搬性の罠) |
+| `m365-skill-pack` | スキル | 実装↔監査の反復を Microsoft 365 Copilot のカスタムエージェント(Agent Builder)に委ねるための資産一式。スキル ZIP の検証と梱包、入力 ZIP の作成、結果の取り込み。日本語の手引きは [shared/skills/m365-skill-pack/README.md](shared/skills/m365-skill-pack/README.md) |
+| `new-agent-asset` | コマンド | このリポジトリに新しい資産の雛形を作る |
+| `asset-reviewer` | エージェント | 新しい資産を読み取り専用で審査する |
+
+## スクリプト
+
+| コマンド | 内容 |
 | --- | --- |
-| `npm run validate` | Shared-asset contract, name/location agreement, `name` ≤ 64 and `description` ≤ 1024, unique names, no hardcoded machine paths, manifest and version consistency |
-| `npm run build` | Regenerates every owned output directory from `shared/` |
-| `npm run build:check` | Fails if the committed output does not match the source (missing, stale or orphaned files) |
-| `npm run check` | `validate` + `build:check` — run this before committing |
-| `npm test` | Unit tests for scripts that ship inside skills (currently the `m365-skill-pack` ZIP writer, bundle format, package validator and sandbox-side Python scripts; Python tests skip when no interpreter is on PATH) |
+| `npm run validate` | 共有資産の契約、名前と置き場所の一致、`name` ≤ 64 と `description` ≤ 1024、名前の一意性、マシン固有パスの不在、マニフェストとバージョンの整合 |
+| `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
+| `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
+| `npm run check` | `validate` + `build:check`。コミット前に実行する |
+| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
 
 ## CI
 
-| Workflow | Trigger | What it enforces |
+| ワークフロー | 契機 | 強制する内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | push to `main`, PR | `npm run validate`, `npm run build:check`, `npm test`, markdownlint |
-| [`link-check.yml`](.github/workflows/link-check.yml) | PR touching Markdown, weekly | lychee link check; a scheduled failure opens an issue instead of failing the run |
-| [`release.yml`](.github/workflows/release.yml) | tag `v*` | tag matches `package.json`, full `npm run check`, publishes a release with `opencode.zip` / `copilot.zip` |
+| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint |
+| [`link-check.yml`](.github/workflows/link-check.yml) | Markdown を触る PR、毎週 | lychee によるリンク検査。定期実行で失敗したときは run を落とさず issue を開く |
+| [`release.yml`](.github/workflows/release.yml) | タグ `v*` | タグが `package.json` と一致すること、`npm run check` 全体、`opencode.zip` / `copilot.zip` 付きのリリース発行 |
 
-## Versioning
+## バージョン管理
 
-`package.json` is the single version source. `validate` fails if
-`plugins/*/.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json` disagree with it,
-and the release workflow fails if the tag disagrees. To release: bump all three, commit, then
-push a `vX.Y.Z` tag.
+バージョンの正本は `package.json` だけ。`plugins/*/.claude-plugin/plugin.json` や
+`.claude-plugin/marketplace.json` がそれと食い違えば `validate` が失敗し、タグが食い違えば
+リリースのワークフローが失敗する。リリースするには 3 つを同時に上げてコミットし、`vX.Y.Z` の
+タグを push する。
 
-## License
+## ライセンス
 
 [MIT](LICENSE)
