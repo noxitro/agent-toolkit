@@ -10,10 +10,11 @@ Usage:
         files (_m365/...) to <workdir>/_m365/. Writes <workdir>/_m365/manifest.json with
         the sha256 of every repository file so that later changes can be detected.
         An unsafe path anywhere in the bundle aborts before anything is written.
-        --kind output (auto-detected for output bundles) records an empty manifest, so
-        every repository file in the bundle counts as a change (the auditor's view),
-        and the bundle's _m365/AUDIT.md is kept as _m365/AUDIT.implementer.md so that
-        the auditor's report starts fresh.
+        --kind output (auto-detected for output bundles): the auditor's view. A bundle
+        from `pack --full` carries the input manifest, which is kept so that `status`
+        shows the real changes; a bundle without one gets an empty manifest and every
+        repository file in it counts as a change. The bundle's _m365/AUDIT.md is kept
+        as _m365/AUDIT.implementer.md so that the auditor's report starts fresh.
 
     python3 bundle_io.py status <workdir>
         Print {"added": [...], "modified": [...], "deleted": [...], "unchanged": N}
@@ -681,7 +682,7 @@ def build_parser():
     p.add_argument("bundle")
     p.add_argument("workdir")
     p.add_argument("--kind", choices=["auto", "input", "output"], default="auto",
-                   help="input records every file in the manifest; output records none (default: detect)")
+                   help="input: hash every file into the manifest; output: keep the carried manifest, or an empty one if absent (default: detect)")
     p.set_defaults(func=cmd_unpack)
 
     p = sub.add_parser("status", help="list changes since unpack as JSON")

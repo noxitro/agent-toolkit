@@ -142,16 +142,13 @@ test('every m365 Python script compiles with py_compile', (t) => {
   if (!PY) return t.skip(NO_PY)
   const files = listFiles(SKILLS).filter((p) => p.endsWith('.py')).map((p) => join(SKILLS, p))
   assert.ok(files.length >= 4, `found ${files.length} .py files`)
-  const cache = mkdtempSync(join(tmpdir(), 'm365pyc-'))
-  try {
-    // PYTHONPYCACHEPREFIX keeps the .pyc files out of the source tree.
-    ok(py(['-m', 'py_compile', ...files], { env: { PYTHONPYCACHEPREFIX: cache } }), 'py_compile')
-    // The sandbox Python version is unknown; hold the scripts to 3.8 syntax.
-    const check = 'import ast,sys\nfor p in sys.argv[1:]:\n    ast.parse(open(p,"rb").read(), p, feature_version=(3, 8))\n'
-    ok(py(['-c', check, ...files]), 'ast.parse(feature_version=(3, 8))')
-  } finally {
-    rmSync(cache, { recursive: true, force: true })
-  }
+  // Compile in memory: writing .pyc through PYTHONPYCACHEPREFIX duplicates the absolute
+  // path and trips MAX_PATH on deep Windows checkouts.
+  const compileAll = 'import sys\nfor f in sys.argv[1:]:\n    compile(open(f, "rb").read(), f, "exec")\n'
+  ok(py(['-c', compileAll, ...files]), 'compile')
+  // The sandbox Python version is unknown; hold the scripts to 3.8 syntax.
+  const check = 'import ast,sys\nfor p in sys.argv[1:]:\n    ast.parse(open(p,"rb").read(), p, feature_version=(3, 8))\n'
+  ok(py(['-c', check, ...files]), 'ast.parse(feature_version=(3, 8))')
 })
 
 for (const inputFormat of ['zip', 'md']) {

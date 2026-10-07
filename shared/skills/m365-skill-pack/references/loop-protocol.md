@@ -47,8 +47,10 @@ One paragraph. What must be true when the task is done.
 3
 ```
 
-- `Scope` lists glob patterns (fnmatch) the implementer may change. Anything outside is
-  a FAIL in the audit.
+- `Scope` lists glob patterns the implementer may change; anything outside is a FAIL in
+  the audit. `*` and `?` do not cross `/`, `**` does (`src/**` is the whole subtree,
+  `src/*.py` only the top level), a trailing `/` means the whole directory, and `[...]`
+  character classes work. This is `audit_checks.py`'s own matcher, not Python's fnmatch.
 - Each `AC-n` must be checkable from the files alone: no network, no package
   installation, no external service. An acceptance criterion the auditor cannot verify
   from files is a bad criterion; rewrite it.

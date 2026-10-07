@@ -51,6 +51,14 @@ const PLACEHOLDERS = {
 const BANNER = (src) =>
   `<!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from ${src} in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->`
 
+/**
+ * Sources are LF in the repository, but a checkout with core.autocrlf=true hands them
+ * over with CRLF; normalising here keeps the YAML parser and the generated output stable.
+ */
+function readSource(file) {
+  return readFileSync(file, 'utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n')
+}
+
 export function splitFrontmatter(text, file) {
   if (!text.startsWith('---')) throw new Error(`${file}: missing YAML frontmatter`)
   const end = text.indexOf('\n---', 3)
@@ -108,7 +116,7 @@ export function loadAssets() {
   for (const name of listDirs(join(SHARED, 'skills'))) {
     const dir = join(SHARED, 'skills', name)
     const file = join(dir, 'SKILL.md')
-    const text = readFileSync(file, 'utf8')
+    const text = readSource(file)
     const { data, body } = splitFrontmatter(text, relPath(file))
     assets.push({
       kind: 'skills',
@@ -124,7 +132,7 @@ export function loadAssets() {
   for (const kind of ['commands', 'agents']) {
     for (const fileName of listFiles(join(SHARED, kind), '.md')) {
       const file = join(SHARED, kind, fileName)
-      const text = readFileSync(file, 'utf8')
+      const text = readSource(file)
       const { data, body } = splitFrontmatter(text, relPath(file))
       assets.push({
         kind,
