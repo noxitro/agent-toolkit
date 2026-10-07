@@ -3,3 +3,6 @@ artifacts/
 lychee/
 # per-task working files of the m365-skill-pack skill (input/output bundles, reports)
 .m365/
+
+# m365-emu run results (tools/m365-emu/README.md)
+tools/m365-emu/results/
