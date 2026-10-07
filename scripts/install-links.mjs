@@ -33,8 +33,11 @@ function expandHome(p) {
   return p.startsWith('~') ? join(homedir(), p.slice(1)) : p
 }
 
+// Case is folded only where the filesystem does (Windows); elsewhere two paths that
+// differ by case are two different targets.
 function normalize(p) {
-  return resolve(p).replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+  const r = resolve(p).replace(/[\\/]+$/, '')
+  return process.platform === 'win32' ? r.replace(/\//g, '\\').toLowerCase() : r
 }
 
 let problems = 0

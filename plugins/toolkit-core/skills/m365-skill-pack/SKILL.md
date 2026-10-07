@@ -79,11 +79,15 @@ the "Measured" tables before relying on the sandbox for real work.
    node <skill-dir>/scripts/unpack-output.mjs <out.zip> --repo <repo>
    ```
 
-   It applies changed files to the working tree, routes `_m365/*` to
-   `<repo>/.m365/<slug>/reports/`, prints the verdict per round and exits 0 on PASS,
-   2 on FAIL, 1 when there is no usable `AUDIT.md`. Nothing is committed. Review with
-   `git diff` and the report; on FAIL decide with the user between fixing locally and
-   sending another round with an updated task contract.
+   It applies the bundle to the working tree three-way against the snapshot the sandbox
+   started from: files the sandbox left untouched keep their local copy (`kept`), a
+   file changed on both sides is a `conflict` and is not written (rerun with `--force`
+   to take the sandbox version). A bundle without `_m365/manifest.json` is a plain
+   overwrite. `_m365/*` goes to `<repo>/.m365/<slug>/reports/`. Exit codes: 3 when
+   conflicts were left unresolved (this outranks the verdict), otherwise 0 PASS, 2 FAIL,
+   1 no usable `AUDIT.md`. Nothing
+   is committed. Review with `git diff` and the report; on FAIL decide with the user
+   between fixing locally and sending another round with an updated task contract.
 
 ## Editing the agents or skills
 

@@ -3,11 +3,13 @@
 // audit verdict. Accepts a .zip or a Markdown bundle. Protocol files under _m365/ go
 // to the reports directory, never into the repository. Nothing is committed.
 //
-//   node unpack-output.mjs <out.zip|out.md> [--repo <dir>] [--reports <dir>] [--dry-run] [--json]
+//   node unpack-output.mjs <out.zip|out.md> [--repo <dir>] [--reports <dir>] [--dry-run] [--force] [--json]
 //
-// Exit code: 0 = PASS, 2 = FAIL, 1 = error or no usable AUDIT.md.
+// Exit code: 3 = conflicts left unresolved (takes precedence), otherwise 0 = PASS, 2 = FAIL,
+// 1 = error or no usable AUDIT.md.
 
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { parseArgs, usage } from './lib/args.mjs'
@@ -20,12 +22,19 @@ Usage: node unpack-output.mjs <out.zip|out.md> [options]
   --repo <dir>      repository root to write into (default: current directory)
   --reports <dir>   where _m365/* files go (default: <repo>/.m365/<slug>/reports)
   --dry-run         report what would change without writing
+  --force           overwrite files that changed both locally and in the sandbox
   --json            machine-readable summary
+
+With a bundle from \`pack --full\` the apply is three-way against the input snapshot:
+files the sandbox left untouched keep their local copy, and a file changed on both
+sides is reported as a conflict and left alone unless --force is given. A bundle
+without _m365/manifest.json is applied as a plain overwrite.
+Exit: 3 conflicts (takes precedence), 0 PASS, 2 FAIL, 1 error or no usable AUDIT.md.
 `
 
 let args
 try {
-  args = parseArgs(process.argv.slice(2), { repo: 'string', reports: 'string', 'dry-run': 'bool', json: 'bool', help: 'bool' })
+  args = parseArgs(process.argv.slice(2), { repo: 'string', reports: 'string', 'dry-run': 'bool', force: 'bool', json: 'bool', help: 'bool' })
 } catch (e) {
   usage(`${e.message}\n${HELP}`)
 }
@@ -117,7 +126,43 @@ const added = []
 const modified = []
 const unchanged = []
 const deleted = []
+const kept = [] // untouched in the sandbox, so the local copy (possibly newer) stays
+const conflicts = [] // both sides changed since the snapshot; nothing written (use --force)
 const reports = []
+
+// The baseline is the input manifest a `pack --full` bundle carries: path -> sha256 of
+// the bytes the sandbox started from. Without it the apply is a plain overwrite.
+const manifestFile = files.find((f) => f.path === `${PROTOCOL_PREFIX}manifest.json`)
+let baseline = null
+if (manifestFile) {
+  try {
+    const m = JSON.parse(manifestFile.data.toString('utf8'))
+    if (m && m.schema === 'm365-manifest/1' && m.files && typeof m.files === 'object' && !Array.isArray(m.files)) {
+      // A null-prototype copy, so file names like "constructor" cannot hit inherited properties.
+      baseline = Object.assign(Object.create(null), m.files)
+    } else console.error('warning: _m365/manifest.json in the bundle has an unexpected shape; applying without a baseline')
+  } catch {
+    console.error('warning: the bundle carries an unreadable _m365/manifest.json; applying without a baseline')
+  }
+}
+const baseOf = (path) => (baseline && Object.hasOwn(baseline, path) ? baseline[path] : undefined)
+
+/** Byte-level CRLF -> LF, with no text decoding so invalid UTF-8 cannot collide with U+FFFD. */
+function stripCr(buf) {
+  const out = Buffer.allocUnsafe(buf.length)
+  let n = 0
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) continue
+    out[n++] = buf[i]
+  }
+  return out.subarray(0, n)
+}
+/** sha256 of the bytes as given and of their LF-normalised form, so CRLF checkouts still match. */
+function hashesOf(buf) {
+  const out = new Set([createHash('sha256').update(buf).digest('hex')])
+  if (buf.includes(0x0d)) out.add(createHash('sha256').update(stripCr(buf)).digest('hex'))
+  return out
+}
 
 for (const f of files) {
   if (isProtocolPath(f.path)) {
@@ -136,8 +181,29 @@ for (const f of files) {
   const exists = existsSync(dest)
   let data = f.data
   if (f.text && exists) data = Buffer.from(matchLineEndings(f.data.toString('utf8'), readFileSync(dest, 'utf8')), 'utf8')
-  if (exists && readFileSync(dest).equals(data)) {
+  const local = exists ? readFileSync(dest) : null
+  if (local && local.equals(data)) {
     unchanged.push(f.path)
+    continue
+  }
+  // Three-way apply against the baseline the sandbox started from (carried manifest).
+  const base = baseOf(f.path)
+  if (base !== undefined) {
+    const remoteTouched = !hashesOf(f.data).has(base)
+    const localTouched = local ? !hashesOf(local).has(base) : true
+    if (!remoteTouched) {
+      // Untouched in the sandbox: whatever is here now is newer than the snapshot.
+      kept.push(f.path)
+      continue
+    }
+    if (localTouched && !opts.force) {
+      conflicts.push(f.path)
+      continue
+    }
+  } else if (baseline && local && !opts.force) {
+    // Added remotely (absent from the snapshot), but something else already exists here.
+    // Without any baseline the apply is a plain overwrite, as documented.
+    conflicts.push(f.path)
     continue
   }
   ;(exists ? modified : added).push(f.path)
@@ -150,23 +216,32 @@ for (const d of deletes) {
   const dest = resolve(repo, d)
   if (!insideRepo(dest)) throw new Error(`refusing to delete outside the repository: ${d}`)
   if (!existsSync(dest)) continue
+  const base = baseOf(d)
+  // With a baseline, deleting is allowed only for a file the sandbox saw and that is
+  // still at its snapshot state; anything else here is newer than what was judged.
+  if (baseline && !opts.force && (base === undefined || !hashesOf(readFileSync(dest)).has(base))) {
+    conflicts.push(d)
+    continue
+  }
   deleted.push(d)
   if (!opts['dry-run']) unlinkSync(dest)
 }
 
 // ---------------------------------------------------------------- report
 const verdict = audit.summary?.verdict ?? null
-const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, added, modified, unchanged, deleted, reports: reports.map((p) => join(reportsDir, p.slice(PROTOCOL_PREFIX.length))), auditError: audit.error ?? null }
+const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, baseline: !!baseline, added, modified, unchanged, kept, conflicts, deleted, reports: reports.map((p) => join(reportsDir, p.slice(PROTOCOL_PREFIX.length))), auditError: audit.error ?? null }
 
 if (opts.json) console.log(JSON.stringify(summary, null, 2))
 else {
   console.log(`${opts['dry-run'] ? '[dry-run] ' : ''}bundle ${file}`)
   console.log(`  task: ${task}  verdict: ${verdict ?? 'n/a'}${summary.finalRound ? `  final round: ${summary.finalRound}` : ''}`)
   if (audit.error) console.log(`  audit: ${audit.error}`)
-  console.log(`  added ${added.length}, modified ${modified.length}, unchanged ${unchanged.length}, deleted ${deleted.length}, reports ${reports.length}`)
+  console.log(`  added ${added.length}, modified ${modified.length}, unchanged ${unchanged.length}, kept ${kept.length}, conflicts ${conflicts.length}, deleted ${deleted.length}, reports ${reports.length}${baseline ? '' : '  (no baseline manifest: plain overwrite)'}`)
   for (const p of added) console.log(`    + ${p}`)
   for (const p of modified) console.log(`    ~ ${p}`)
   for (const p of deleted) console.log(`    - ${p}`)
+  for (const p of kept) console.log(`    = ${p}  (untouched in the sandbox; local copy kept)`)
+  for (const p of conflicts) console.log(`    ! ${p}  (changed both locally and in the sandbox; not written - resolve by hand or rerun with --force)`)
   for (const p of summary.reports) console.log(`    r ${p}`)
   if (audit.summary) {
     for (const r of audit.summary.rounds ?? []) {
@@ -185,4 +260,6 @@ else {
   }
 }
 
-process.exit(verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 2 : 1)
+// Conflicts mean the working tree is not what the audit judged, so exit 3 outranks every
+// other outcome (PASS, FAIL and a missing report alike).
+process.exit(conflicts.length ? 3 : verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 2 : 1)

@@ -20,8 +20,11 @@ letter, no `.git` segment. `_m365/` is reserved for protocol files:
 
 ## ZIP encoding
 
-Plain `.zip`, store or deflate, no directory entries. An output ZIP holds only added and
-modified files plus the `_m365/` files.
+Plain `.zip`, store or deflate, no directory entries. `pack --full` (what the agent
+instructions use) writes every repository file plus the `_m365/` files and the input
+`_m365/manifest.json`, so an auditor can tell real changes from untouched files. Plain
+`pack` writes only added and modified files plus the `_m365/` files. Deleted paths go
+to `_m365/DELETED.txt` in both modes.
 
 ## Markdown encoding
 

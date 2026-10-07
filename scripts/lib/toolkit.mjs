@@ -31,6 +31,8 @@ export const OWNED_DIRS = [
 
 export const KINDS = ['skills', 'commands', 'agents']
 export const TARGETS = ['claude', 'opencode', 'copilot']
+/** The only frontmatter keys allowed at the top level of a shared asset. */
+export const PORTABLE_KEYS = ['name', 'description', 'targets', 'harness']
 
 // agentskills.io constraints, also enforced by Claude Code and Copilot (VS 2026 18.5+).
 export const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -144,6 +146,12 @@ export function validateAsset(asset) {
   const problems = []
   const at = asset.sourceFile
   const { name, description, targets, harness } = asset.data
+
+  // Only the portable keys live at the top level; anything else would be dropped by
+  // emit() without a trace, so a misplaced `allowed-tools` or `model` is an error here.
+  for (const key of Object.keys(asset.data))
+    if (!PORTABLE_KEYS.includes(key))
+      problems.push(`${at}: top-level key \`${key}\` is not portable - move it under \`harness.<target>.frontmatter\``)
 
   if (typeof name !== 'string' || !name) {
     problems.push(`${at}: \`name\` is required`)
