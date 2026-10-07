@@ -187,6 +187,10 @@ const plan = []
 const auditOnly = files.every((f) => isProtocolPath(f.path))
 let auditSavedAs = null
 if (!opts.reports && existsL(join(repo, '.m365')) && !realInside(repo, join(repo, '.m365'))) throw new Error(`refusing to use ${join(repo, '.m365')}: it leaves the repository`)
+// The slug directory itself (.m365/<slug>) and the reports directory may exist already;
+// neither may be a symlink that leads out of .m365/.
+for (const dir of [dirname(reportsDir), reportsDir])
+  if (!opts.reports && existsL(dir) && !realInside(join(repo, '.m365'), dir)) throw new Error(`refusing to use ${dir}: it leaves ${join(repo, '.m365')}`)
 
 for (const f of files) {
   if (isProtocolPath(f.path)) {
