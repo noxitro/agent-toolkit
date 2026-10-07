@@ -233,10 +233,10 @@ test('bundle_io: Windows device names and 8.3 short-name segments are refused, a
     assert.match(r.stderr, why)
     assert.ok(!existsSync(work))
   }
-  ok(py([BUNDLE_IO, 'unpack', zipBundle(join(tmp, 'fine.zip'), { 'console.txt': 'x\n', 'nul_check.py': 'y\n', 'a~b.txt': 'z\n' }), join(tmp, 'fine')]), 'names that only look close')
+  ok(py([BUNDLE_IO, 'unpack', zipBundle(join(tmp, 'fine.zip'), { 'console.txt': 'x\n', 'nul_check.py': 'y\n', 'a~b.txt': 'z\n', 'notes~2024.md': 'n\n', 'backup~3.json': '{}\n', 'release~1.2/x.txt': 'r\n' }), join(tmp, 'fine')]), 'names that only look close')
 })
 
-test('audit_checks json: NaN, Infinity and a BOM FAIL; JSON-with-comments files may have comments', (t) => {
+test('audit_checks json: NaN and Infinity FAIL; a BOM and JSON-with-comments files are accepted', (t) => {
   if (!PY) return t.skip('no python interpreter on PATH')
   const { work } = workdir('m365fix-json-', { 'src/a.py': 'x = 1\n' })
   mkdirSync(join(work, 'src/.vscode'), { recursive: true })
@@ -255,9 +255,8 @@ test('audit_checks json: NaN, Infinity and a BOM FAIL; JSON-with-comments files 
   assert.equal(j.status, 'FAIL')
   assert.match(j.detail, /src\/nan\.json: NaN is not valid JSON/)
   assert.match(j.detail, /src\/inf\.json: -Infinity is not valid JSON/)
-  assert.match(j.detail, /src\/bom\.json: starts with a UTF-8 byte order mark/)
   assert.match(j.detail, /src\/plain\.json: /)
-  assert.doesNotMatch(j.detail, /tsconfig|settings|conf\.jsonc/)
+  assert.doesNotMatch(j.detail, /tsconfig|settings|conf\.jsonc|bom\.json/)
 })
 
 test('bundle_io unpack: an output ZIP that carries only a manifest is detected as output', (t) => {

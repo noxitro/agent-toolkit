@@ -219,12 +219,15 @@ test('install-links: relative link targets, ~user, and replacing a wrong link', 
   assert.equal(readlinkSync(linkPath), join(root, 'dist'))
   assert.deepEqual(readdirSync(dirname(linkPath)), ['demo-skill'])
 
-  // "~user/..." is not the current user's home.
+  // "~user/..." is not the current user's home, and is refused rather than created as a
+  // literal "~nobody" directory under the current one.
   write(root, 'toolkit.config.json', JSON.stringify({ claudePlugin: 'toolkit-core', links: [{ path: '~nobody/x', target: 'dist' }] }))
-  const tilde = run('install-links.mjs', root, ['--check'], { HOME: home })
-  assert.equal(tilde.status, 1)
-  assert.ok(!existsSync(join(home, 'nobody')))
-  assert.match(tilde.out, /~nobody\/x/)
+  for (const args of [['--check'], []]) {
+    const tilde = run('install-links.mjs', root, args, { HOME: home })
+    assert.equal(tilde.status, 1, tilde.out)
+    assert.match(tilde.out, /~nobody\/x[\s\S]*only ~ and ~\/ are expanded/)
+    assert.ok(!existsSync(join(home, 'nobody')) && !existsSync(join(root, '~nobody')))
+  }
 })
 
 // --------------------------------------------------------------- 2-4. workflows

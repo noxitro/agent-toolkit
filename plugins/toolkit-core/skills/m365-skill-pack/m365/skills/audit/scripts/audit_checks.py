@@ -396,9 +396,10 @@ def reject_constant(name):
 
 
 def json_error(data, rel):
-    """Why the file is not valid JSON, or None."""
+    """Why the file is not valid JSON, or None. A UTF-8 BOM is tolerated: Visual Studio
+    writes one into appsettings.json and its readers accept it."""
     if data.startswith(b"\xef\xbb\xbf"):
-        return "%s: starts with a UTF-8 byte order mark" % rel
+        data = data[3:]
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as e:

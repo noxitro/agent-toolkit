@@ -2,6 +2,7 @@
 // in references/bundle-format.md; keep this file and m365/skills/common/scripts/bundle_io.py
 // in agreement with that document.
 
+import { isAbsolute, sep } from 'node:path'
 import { BINARY_EXT, extOf } from './m365-rules.mjs'
 
 export const BUNDLE_MAGIC = '# m365-bundle v1'
@@ -27,9 +28,19 @@ export function unsafePathReason(p) {
     // `### FILE <path> [flags]` would read the suffix as header flags.
     if (/ \[[^\]]*\]$/.test(s)) return 'segment ends with " [...]", which the Markdown header reserves for flags'
     if (isWindowsDeviceName(s)) return 'Windows reserved device name'
-    if (/~\d/.test(s)) return '8.3 short-name pattern (~N) in segment'
+    if (isShortName(s)) return '8.3 short-name pattern (~N) in segment'
   }
   return null
+}
+
+/**
+ * A name Windows could have generated as an 8.3 alias of another file (`PROGRA~1`,
+ * `FOO~2.TXT`): at most 8 characters up to `~<digits>` and an extension of at most 3.
+ * `notes~2024.md` or `backup~3.json` cannot be aliases and stay allowed.
+ */
+export function isShortName(seg) {
+  const m = /^([^.]*~\d+)(\.[^.]*)?$/.exec(seg)
+  return !!m && m[1].length <= 8 && (!m[2] || m[2].length <= 4)
 }
 
 /** CON, PRN, AUX, NUL, COM1-9, LPT1-9 in any letter case, with or without an extension. */
@@ -61,6 +72,33 @@ export function isProtocolPath(p) {
 /** Case- and normalisation-insensitive key, as the default macOS and Windows file systems compare names. */
 export function foldPath(p) {
   return p.normalize('NFC').toLowerCase()
+}
+
+/**
+ * Why a set of delivered paths cannot be laid out on a case-insensitive file system, or
+ * null: two names that fold together, or a file that folds to the directory of another
+ * (Docs and docs/x.md). bundle_io.py refuses the same sets.
+ */
+export function foldCollision(paths) {
+  const byFold = new Map()
+  for (const p of paths) {
+    const k = foldPath(p)
+    if (byFold.has(k)) return `${byFold.get(k)} and ${p} differ only in letter case or Unicode normalisation`
+    byFold.set(k, p)
+  }
+  for (const p of paths) {
+    const segs = foldPath(p).split('/')
+    for (let k = 1; k < segs.length; k++) {
+      const prefix = segs.slice(0, k).join('/')
+      if (byFold.has(prefix)) return `${byFold.get(prefix)} is a file but is also the directory of ${p}`
+    }
+  }
+  return null
+}
+
+/** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
+export function escapes(rel) {
+  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
 }
 
 /** Task slugs name directories under .m365/, so they follow the same rule as make-input. */

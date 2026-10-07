@@ -12,9 +12,9 @@
 
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
-import { decodeUtf8, formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
+import { decodeUtf8, escapes, foldCollision, formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
 import { CONVENTION_FILES, INPUT_EXCLUDE_RES, globToRegExp } from './lib/m365-rules.mjs'
 import { MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES } from './lib/unzip.mjs'
 import { writeZip } from './lib/zip.mjs'
@@ -72,11 +72,6 @@ const outDir = resolve(opts.out ?? join(repo, '.m365', slug))
 // ----------------------------------------------------------------- discovery
 function toPosix(p) {
   return p.split(sep).join('/')
-}
-
-/** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
-function escapes(rel) {
-  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
 }
 
 function gitFiles() {
@@ -173,6 +168,14 @@ for (const rel of candidates.sort()) {
   if (st.size > maxFile) console.warn(`warning: ${rel} is ${st.size} bytes (over --max-file ${maxFile})`)
   files.push({ path: rel, data })
   total += st.size
+}
+
+// bundle_io.py refuses names that fold together (Makefile and makefile), since the local
+// unpacker could not lay them out on macOS or Windows; say so here instead of after upload.
+const clash = foldCollision(files.map((f) => f.path))
+if (clash) {
+  console.error(`error: ${clash}; the sandbox would refuse this bundle - exclude one of them with --exclude`)
+  process.exit(1)
 }
 
 // ------------------------------------------------------------ protocol files

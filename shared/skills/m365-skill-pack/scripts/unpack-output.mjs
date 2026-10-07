@@ -12,9 +12,9 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
-import { PROTOCOL_PREFIX, assertSafePath, foldPath, isBinary, isGitSegment, isProtocolPath, isSafeSlug, normaliseText, parseAuditSummary, parseBundle, restoreTextStyle } from './lib/bundle.mjs'
+import { PROTOCOL_PREFIX, assertSafePath, escapes, foldPath, isBinary, isGitSegment, isProtocolPath, isSafeSlug, normaliseText, parseAuditSummary, parseBundle, restoreTextStyle } from './lib/bundle.mjs'
 import { INPUT_EXCLUDE_RES } from './lib/m365-rules.mjs'
 import { readZip } from './lib/unzip.mjs'
 
@@ -27,7 +27,8 @@ Usage: node unpack-output.mjs <out.zip|out.md> [options]
   --reports <dir>   where _m365/* files go (default: <repo>/.m365/<slug>/reports)
   --dry-run         report what would change without writing
   --force           overwrite files that changed both locally and in the sandbox
-  --allow-excluded  allow writes and deletions under paths make-input excludes by default
+  --allow-excluded  apply writes and deletions under paths make-input excludes by default
+                    (otherwise they are skipped and listed as excluded)
                     (node_modules/, .env, .venv/, .m365/, keys, build output, ...)
   --json            machine-readable summary
 
@@ -119,11 +120,6 @@ if (task && !isSafeSlug(task)) {
   task = null
 }
 task = task ?? 'unknown'
-
-/** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
-function escapes(rel) {
-  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
-}
 
 function insideDir(base, abs) {
   const rel = relative(base, abs)
@@ -255,10 +251,16 @@ for (const dir of [dirname(reportsDir), reportsDir])
   if (!opts.reports && existsL(dir) && !realInside(join(repo, '.m365'), dir)) throw new Error(`refusing to use ${dir}: it leaves ${join(repo, '.m365')}`)
 
 // The input left these out on purpose, so `git status` may not show what lands there
-// (ignored files, .m365/ itself). Only an explicit flag lets the bundle touch them.
+// (ignored files, .m365/ itself). They are left out of the apply and listed, so that build
+// output the sandbox produced (dist/, .venv/) does not cost the rest of the bundle; only
+// an explicit flag lets the bundle touch them.
+const excluded = []
 if (!opts['allow-excluded']) {
-  const hit = [...files.filter((f) => !isProtocolPath(f.path)).map((f) => f.path), ...deletes].filter((p) => INPUT_EXCLUDE_RES.some((re) => re.test(p)))
-  if (hit.length) throw new Error(`refusing to touch paths the input bundle excludes by default (rerun with --allow-excluded if intended): ${hit.join(', ')}`)
+  const isExcluded = (p) => !isProtocolPath(p) && INPUT_EXCLUDE_RES.some((re) => re.test(p))
+  for (const f of files) if (isExcluded(f.path)) excluded.push(f.path)
+  for (const d of deletes) if (isExcluded(d)) excluded.push(d)
+  files = files.filter((f) => !isExcluded(f.path))
+  deletes = deletes.filter((d) => !isExcluded(d))
 }
 
 // A deletion whose name folds to a delivered file is a case-only (or normalisation-only)
@@ -348,8 +350,12 @@ for (const f of files) {
   }
   // Three-way apply against the baseline the sandbox started from (carried manifest).
   if (base !== undefined) {
-    const remoteTouched = !hashesOf(f.data).has(base)
     const localTouched = local ? !hashesOf(local).has(base) : true
+    // A Markdown output always carries LF text, so a mixed-ending file the sandbox never
+    // touched only differs from a raw-bytes baseline by its line endings: same text as the
+    // unchanged local copy means untouched.
+    const reencoded = local && !localTouched && normaliseText(local) !== null && normaliseText(local) === normaliseText(f.data)
+    const remoteTouched = !hashesOf(f.data).has(base) && !reencoded
     if (!remoteTouched) {
       // Untouched in the sandbox: whatever is here now is newer than the snapshot.
       kept.push(f.path)
@@ -367,6 +373,18 @@ for (const f of files) {
   }
   ;(exists ? modified : added).push(f.path)
   writes.push({ kind: 'write', dest, data, mode, rel: f.path })
+}
+
+/**
+ * Whether `set` holds the file at `p`. On a case-insensitive file system lstat finds the
+ * file `docs` under the spelling `Docs`, so a differently cased entry for the same file
+ * (same inode) counts too.
+ */
+function holds(set, p) {
+  if (set.has(p)) return true
+  const k = foldPath(p)
+  for (const q of set) if (foldPath(q) === k && sameFile(q, p)) return true
+  return false
 }
 
 // Every directory a write needs must be absent, a directory, or a file this plan deletes
@@ -390,8 +408,8 @@ for (const w of writes) {
     if (up === p) break
     p = up
   }
-  if (blocker && deleteSet.has(blocker)) w.afterDeletes = true
-  else if (blocker && blockedDeletes.has(blocker)) {
+  if (blocker && holds(deleteSet, blocker)) w.afterDeletes = true
+  else if (blocker && holds(blockedDeletes, blocker)) {
     for (const list of [added, modified]) if (list.includes(w.rel)) list.splice(list.indexOf(w.rel), 1)
     conflicts.push(w.rel)
     w.skip = true
@@ -478,19 +496,20 @@ if (!opts['dry-run']) applyPlan(plan)
 
 // ---------------------------------------------------------------- report
 const verdict = audit.summary?.verdict ?? null
-const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, baseline: !!baseline, added, modified, unchanged, kept, conflicts, deleted, reports: reports.map((p) => (p === `${PROTOCOL_PREFIX}AUDIT.md` && auditSavedAs ? auditSavedAs : join(reportsDir, p.slice(PROTOCOL_PREFIX.length)))), auditSavedAs, auditError: audit.error ?? null }
+const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, baseline: !!baseline, added, modified, unchanged, kept, conflicts, deleted, excluded, reports: reports.map((p) => (p === `${PROTOCOL_PREFIX}AUDIT.md` && auditSavedAs ? auditSavedAs : join(reportsDir, p.slice(PROTOCOL_PREFIX.length)))), auditSavedAs, auditError: audit.error ?? null }
 
 if (opts.json) console.log(JSON.stringify(summary, null, 2))
 else {
   console.log(`${opts['dry-run'] ? '[dry-run] ' : ''}bundle ${file}`)
   console.log(`  task: ${task}  verdict: ${verdict ?? 'n/a'}${summary.finalRound ? `  final round: ${summary.finalRound}` : ''}`)
   if (audit.error) console.log(`  audit: ${audit.error}`)
-  console.log(`  added ${added.length}, modified ${modified.length}, unchanged ${unchanged.length}, kept ${kept.length}, conflicts ${conflicts.length}, deleted ${deleted.length}, reports ${reports.length}${baseline ? '' : '  (no baseline manifest: plain overwrite)'}`)
+  console.log(`  added ${added.length}, modified ${modified.length}, unchanged ${unchanged.length}, kept ${kept.length}, conflicts ${conflicts.length}, deleted ${deleted.length}, excluded ${excluded.length}, reports ${reports.length}${baseline ? '' : '  (no baseline manifest: plain overwrite)'}`)
   for (const p of added) console.log(`    + ${p}`)
   for (const p of modified) console.log(`    ~ ${p}`)
   for (const p of deleted) console.log(`    - ${p}`)
   for (const p of kept) console.log(`    = ${p}  (untouched in the sandbox; local copy kept)`)
   for (const p of conflicts) console.log(`    ! ${p}  (changed both locally and in the sandbox; not written - resolve by hand or rerun with --force)`)
+  for (const p of excluded) console.log(`    x ${p}  (excluded from the input by default; not applied - rerun with --allow-excluded to apply)`)
   for (const p of summary.reports) console.log(`    r ${p}`)
   if (auditSavedAs) console.log(`  the independent audit was saved as AUDIT.auditor.md so the implementer's AUDIT.md stays; compare the two verdicts.`)
   if (audit.summary) {

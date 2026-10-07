@@ -32,11 +32,12 @@ if (links.length === 0) {
   process.exit(0)
 }
 
-// Only "~", "~/..." and "~\\..." name the home directory; "~user/..." is left alone (and
-// therefore resolved relative to the current directory, like any other relative path).
+// Only "~", "~/..." and "~\\..." name the home directory. "~user/..." would otherwise
+// resolve to a literal "~user" directory under the current one, so it is refused.
 function expandHome(p) {
   if (p === '~') return homedir()
   if (p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2))
+  if (p.startsWith('~')) throw new Error(`${p}: only ~ and ~/ are expanded; write the home directory out`)
   return p
 }
 
@@ -65,8 +66,16 @@ function placeLink(target, linkPath, type, replacing) {
   try {
     renameSync(tmp, linkPath)
   } catch (e) {
-    renameSync(aside, linkPath)
-    unlinkSync(tmp)
+    try {
+      unlinkSync(tmp)
+    } catch {
+      /* best effort; the error that matters is e */
+    }
+    try {
+      renameSync(aside, linkPath)
+    } catch (restore) {
+      e.message += ` (and the previous link could not be restored; it is at ${aside}: ${restore.message})`
+    }
     throw e
   }
   unlinkSync(aside)
@@ -82,9 +91,16 @@ function normalize(p) {
 let problems = 0
 
 for (const { path: rawPath, target: rawTarget } of links) {
-  const linkPath = resolve(expandHome(rawPath))
-  const target = isAbsolute(rawTarget) ? resolve(rawTarget) : resolve(ROOT, rawTarget)
   const label = rawPath
+  let linkPath
+  try {
+    linkPath = resolve(expandHome(rawPath))
+  } catch (e) {
+    console.log(`  x ${label}\n      ${e.message}`)
+    problems++
+    continue
+  }
+  const target = isAbsolute(rawTarget) ? resolve(rawTarget) : resolve(ROOT, rawTarget)
 
   if (!existsSync(target)) {
     console.log(`  x ${label}\n      target does not exist: ${target} (run npm run build first?)`)

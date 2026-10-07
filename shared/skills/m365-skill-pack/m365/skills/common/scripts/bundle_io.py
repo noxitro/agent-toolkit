@@ -134,7 +134,7 @@ def unsafe_path_reason(p):
             return 'segment ends in " [...]" (reads as Markdown bundle flags)'
         if is_windows_device_name(seg):
             return "Windows reserved device name"
-        if SHORT_NAME_RE.search(seg):
+        if is_short_name(seg):
             return "8.3 short-name pattern (~N) in segment"
     return None
 
@@ -144,7 +144,14 @@ GIT_SHORT_RE = re.compile(r"^git~[0-9]+$")
 # Same rules as isWindowsDeviceName and the ~N check in scripts/lib/bundle.mjs, so the
 # sandbox refuses at pack time what a Windows checkout would refuse at unpack time.
 DEVICE_NAME_RE = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.I)
-SHORT_NAME_RE = re.compile(r"~[0-9]")
+SHORT_NAME_RE = re.compile(r"^([^.]*~[0-9]+)(\.[^.]*)?$")
+
+
+def is_short_name(seg):
+    """A name Windows could have generated as an 8.3 alias (PROGRA~1, FOO~2.TXT): at most
+    8 characters up to ~<digits> and an extension of at most 3, as in bundle.mjs."""
+    m = SHORT_NAME_RE.match(seg)
+    return bool(m) and len(m.group(1)) <= 8 and (m.group(2) is None or len(m.group(2)) <= 4)
 
 
 def is_windows_device_name(seg):

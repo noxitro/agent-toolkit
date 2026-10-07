@@ -85,8 +85,9 @@ the "Measured" tables before relying on the sandbox for real work.
    to take the sandbox version). A bundle without `_m365/manifest.json` is a plain
    overwrite. A bundle that cannot be laid out (a file where it needs a directory, names
    that differ only in case) is refused before anything is written; writes into paths the
-   input excludes by default (`node_modules/`, `.env`, `.venv/`, `.m365/`, keys) need
-   `--allow-excluded`, because `git status` may not show them. `_m365/*` goes to
+   input excludes by default (`node_modules/`, `dist/`, `.env`, `.venv/`, `.m365/`, keys)
+   are skipped and listed as `excluded`, because `git status` may not show them;
+   `--allow-excluded` applies them. `_m365/*` goes to
    `<repo>/.m365/<slug>/reports/`. Exit codes: 3 when
    conflicts were left unresolved (this outranks the verdict), otherwise 0 PASS, 2 FAIL,
    1 no usable `AUDIT.md`. Nothing

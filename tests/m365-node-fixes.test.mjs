@@ -61,6 +61,19 @@ test('unpack-output.mjs: a file replaced by a directory of the same name applies
   assert.deepEqual(readdirSync(repo).filter((n) => n.includes('.m365-')), [], 'no staging files left behind')
 })
 
+test('unpack-output.mjs: on a case-insensitive file system, file docs may become directory Docs/', (t) => {
+  if (process.platform === 'win32') return t.skip('the preload simulates POSIX paths')
+  const repo = repoWith({ docs: 'old\n' })
+  const zip = outZip(repo, { 'Docs/index.md': '# new\n' }, { baseline: { docs: 'old\n' }, deletes: ['docs'] })
+  const r = spawnSync(process.execPath, ['-r', join(ROOT, 'tests/helpers/case-insensitive-fs.cjs'), join(SCRIPTS, 'unpack-output.mjs'), zip, '--repo', repo, '--json'], {
+    encoding: 'utf8',
+    env: { ...process.env, CI_ROOT: repo },
+  })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.equal(readFileSync(join(repo, 'Docs/index.md'), 'utf8'), '# new\n')
+  assert.ok(!readdirSync(repo).includes('docs'))
+})
+
 test('unpack-output.mjs: a bundle carrying both x and x/y.txt is refused before anything is written', () => {
   const repo = repoWith({ 'src/app.py': 'x = 1\n' })
   const zip = outZip(repo, { 'src/app.py': 'x = 2\n', x: 'file\n', 'x/y.txt': 'nested\n' })
@@ -144,21 +157,25 @@ test('unpack-output.mjs: two delivered names that fold together are refused', ()
 })
 
 // ------------------------------------------------------------------ item 3
-test('unpack-output.mjs: destinations the input excludes need --allow-excluded', () => {
-  for (const p of ['node_modules/x/index.js', '.env', '.venv/lib/site.py', '.m365/demo/notes.md', 'keys/server.PEM']) {
-    const repo = repoWith()
-    const zip = outZip(repo, { [p]: 'x\n' })
+test('unpack-output.mjs: destinations the input excludes are skipped unless --allow-excluded', () => {
+  for (const p of ['node_modules/x/index.js', '.env', '.venv/lib/site.py', 'dist/app.js', '.m365/demo/notes.md', 'keys/server.PEM']) {
+    const repo = repoWith({ 'src/app.py': 'x = 1\n' })
+    const zip = outZip(repo, { [p]: 'x\n', 'src/app.py': 'x = 2\n' })
     const r = unpack(repo, zip)
-    assert.equal(r.status, 1, p)
-    assert.match(r.stderr, /--allow-excluded/)
+    assert.equal(r.status, 0, p + r.stderr)
+    const out = JSON.parse(r.stdout)
+    assert.deepEqual(out.excluded, [p])
     assert.ok(!existsSync(join(repo, p)), p)
+    // The rest of the bundle still applies.
+    assert.equal(readFileSync(join(repo, 'src/app.py'), 'utf8'), 'x = 2\n')
     const ok = unpack(repo, zip, '--allow-excluded')
     assert.equal(ok.status, 0, ok.stderr)
+    assert.deepEqual(JSON.parse(ok.stdout).excluded, [])
     assert.equal(readFileSync(join(repo, p), 'utf8'), 'x\n')
   }
   const repo = repoWith({ '.env': 'SECRET=1\n' })
   const r = unpack(repo, outZip(repo, {}, { deletes: ['.env'] }))
-  assert.equal(r.status, 1, 'a deletion is held to the same rule')
+  assert.deepEqual(JSON.parse(r.stdout).excluded, ['.env'], 'a deletion is held to the same rule')
   assert.ok(existsSync(join(repo, '.env')))
 })
 
@@ -185,6 +202,25 @@ test('unpack-output.mjs: a lone-CR file untouched in the sandbox is left alone, 
   assert.equal(readFileSync(join(repo, 'old.txt'), 'utf8'), 'a\rb\r')
 })
 
+test('unpack-output.mjs: a mixed-ending file untouched in the sandbox is kept from a Markdown output', () => {
+  // ZIP input: the baseline is the raw mixed bytes. The Markdown output carries LF text.
+  const raw = 'a\r\nb\nc\r\n'
+  const repo = repoWith({ 'mix.txt': raw })
+  const manifest = JSON.stringify({ schema: 'm365-manifest/1', task: 'demo-task', files: { 'mix.txt': sha(Buffer.from(raw)) } })
+  const md = join(repo, 'out.md')
+  writeFileSync(md, formatBundle({ task: 'demo-task', kind: 'output', files: [
+    { path: 'mix.txt', data: Buffer.from('a\nb\nc\n') },
+    { path: '_m365/manifest.json', data: Buffer.from(manifest) },
+    { path: '_m365/AUDIT.md', data: Buffer.from(AUDIT) },
+  ] }))
+  const r = unpack(repo, md)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  const j = JSON.parse(r.stdout)
+  assert.deepEqual(j.modified, [])
+  assert.deepEqual(j.kept, ['mix.txt'])
+  assert.equal(readFileSync(join(repo, 'mix.txt'), 'utf8'), raw)
+})
+
 test('unpack-output.mjs: a Markdown bundle restores the BOM of the file it replaces', () => {
   const repo = repoWith({ 'doc.md': '﻿# old\r\n' })
   const md = join(repo, 'out.md')
@@ -197,7 +233,7 @@ test('unpack-output.mjs: a Markdown bundle restores the BOM of the file it repla
 // ------------------------------------------------------------- items 5 and 9
 test('path model: header-flag suffixes, Windows device names and 8.3 short names are unsafe', () => {
   for (const p of ['a/b [noeol]', 'x [draft]/y.md', 'notes []', 'CON', 'con.txt', 'src/Nul.tar.gz', 'COM1', 'lpt9.md', 'aux .txt', 'PRN.', 'PROGRA~1/x.md', 'foo~2.txt']) assert.ok(unsafePathReason(p), p)
-  for (const p of ['console.md', 'COM10.txt', 'connect/x.md', 'a [b] c.md', 'a[b].md', 'tilde~x.md', 'auxiliary.py']) assert.equal(unsafePathReason(p), null, p)
+  for (const p of ['console.md', 'COM10.txt', 'connect/x.md', 'a [b] c.md', 'a[b].md', 'tilde~x.md', 'auxiliary.py', 'notes~2024.md', 'backup~3.json', 'release~1.2/x.md']) assert.equal(unsafePathReason(p), null, p)
   assert.match(unsafePathReason('a/b [noeol]'), /reserves for flags/)
   assert.match(unsafePathReason('nul.txt'), /device name/)
   assert.throws(() => formatBundle({ task: 't', kind: 'output', files: [{ path: 'b [noeol]', data: Buffer.from('x') }] }), /unsafe path/)
@@ -212,6 +248,16 @@ test('make-input.mjs: a ZIP over the reader limits is refused, not written', () 
   assert.equal(r.status, 1, r.stderr)
   assert.match(r.stderr, /reader limits[\s\S]*big\.bin/)
   assert.ok(!existsSync(join(repo, '.m365/demo-task/in-demo-task.zip')))
+})
+
+test('make-input.mjs: names that fold together are refused before a bundle is written', () => {
+  for (const pair of [['Makefile', 'makefile'], ['Docs', 'docs/x.md']]) {
+    const repo = repoWith({ [pair[0]]: 'a\n', [pair[1]]: 'b\n', '.m365/TASK.md': TASK })
+    const r = run('make-input.mjs', ['--task', '.m365/TASK.md', '--repo', repo, '--store'], repo)
+    assert.equal(r.status, 1, r.stdout + r.stderr)
+    assert.match(r.stderr, /^error: .*(differ only in letter case|is also the directory of).*--exclude/m)
+    assert.ok(!existsSync(join(repo, '.m365/demo-task/in-demo-task.zip')))
+  }
 })
 
 // ------------------------------------------------------------------ item 7
@@ -280,6 +326,20 @@ test('validator: common/ gets the same junk, symlink and SKILL.* filtering as th
   }
   v = validateSkillDir(skill, { fromTemplate: true, commonDir: common })
   assert.match(v.problems.join('\n'), /common\/scripts\/link\.py is a symbolic link/)
+})
+
+test('validator: a nested SKILL.md is ordinary content, not a second SKILL.md', () => {
+  const base = mkdtempSync(join(tmpdir(), 'm365fix-nested-'))
+  const skill = join(base, 'demo')
+  const common = join(base, 'common')
+  mkdirSync(join(skill, 'references'), { recursive: true })
+  mkdirSync(join(common, 'examples'), { recursive: true })
+  writeFileSync(join(skill, 'SKILL.template.md'), '---\nname: demo\ndescription: Use when testing.\n---\n\nDo it.\n')
+  writeFileSync(join(skill, 'references/SKILL.md'), '# sample\n')
+  writeFileSync(join(common, 'examples/SKILL.md'), '# sample\n')
+  const v = validateSkillDir(skill, { fromTemplate: true, commonDir: common })
+  assert.deepEqual(v.problems, [])
+  assert.deepEqual(v.entries.map((e) => e.name).sort(), ['SKILL.md', 'examples/SKILL.md', 'references/SKILL.md'])
 })
 
 // ----------------------------------------------------------------- item 12
@@ -388,8 +448,9 @@ test('unpack-output.mjs: case variants of _m365/ and .m365/ cannot alias the res
   for (const [files, deletes] of [[{ '.M365/other-task/x.md': 'x\n' }, []], [{}, ['.M365/Other/notes.md']]]) {
     const target = repoWith({ '.M365/Other/notes.md': 'n\n' })
     const u = unpack(target, outZip(target, files, { deletes }))
-    assert.equal(u.status, 1, JSON.stringify(files))
-    assert.match(u.stderr, /--allow-excluded/)
+    assert.deepEqual(JSON.parse(u.stdout).excluded, [...Object.keys(files), ...deletes], JSON.stringify(files))
+    assert.ok(!existsSync(join(target, '.M365/other-task')))
+    assert.ok(existsSync(join(target, '.M365/Other/notes.md')))
   }
 })
 

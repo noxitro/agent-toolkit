@@ -176,7 +176,8 @@ export function validateSkillDir(dir, opts = {}) {
         problems.push(`${label}: ${prefix}${f.rel} would collide with the skill's own SKILL.md; common/ cannot carry one`)
         continue
       }
-      if (fromTemplate && base === 'SKILL.md') {
+      // Only the root SKILL.md competes with SKILL.template.md; a nested one is ordinary content.
+      if (fromTemplate && f.rel === 'SKILL.md') {
         problems.push(`${label}: both SKILL.md and SKILL.template.md exist; keep one`)
         continue
       }

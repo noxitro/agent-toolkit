@@ -24,8 +24,9 @@ Three implementations must agree with this document: `scripts/lib/bundle.mjs` an
   is also the directory of another (`a` and `a/b`). An unpacker that meets one of these refuses the whole file.
 - Both sides (`bundle.mjs` and `bundle_io.py`) also refuse Windows device names as a segment (`CON`,
   `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, any letter case, with or without an
-  extension: `nul.txt`) and any segment holding an 8.3 short-name pattern `~<digit>`
-  (`PROGRA~1`, `foo~2.txt`), since either can alias another file on Windows.
+  extension: `nul.txt`) and any segment shaped like an 8.3 short name (up to 8 characters ending in `~<digits>`,
+  extension of at most 3: `PROGRA~1`, `foo~2.txt`; `notes~2024.md` is fine), since
+  either can alias another file on Windows.
 - Both sides compare names case-folded and in Unicode NFC (lower case of the NFC form),
   as the default macOS and Windows file systems do, on every platform: two delivered
   paths that fold together, or a file that folds to the directory of another (`Docs` and
