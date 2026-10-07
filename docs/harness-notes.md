@@ -24,13 +24,21 @@
 
 **導入。** `dist/opencode/.` を全プロジェクト向けなら `~/.config/opencode/` に、1 つのプロジェクト
 向けなら `.opencode/` にコピーする。`agent/` と `command/` の両方がそこから読まれる。Copilot の
-プロンプトファイルと違い、グローバルの置き場は本当にワークスペース非依存。
+プロンプトファイルと違い、グローバルの置き場は本当にワークスペース非依存。リリースに付く
+`opencode.zip` は直下が `agent/` と `command/` なので、そのまま展開先に解凍する
+(`unzip opencode.zip -d ~/.config/opencode/`)。
 
 **メモ。**
 
-- **スキル機構が無い。** `opencode` を対象にしたスキルはグローバルなコマンドとして出力されるので、
+- **このツールキットはスキルをコマンドとして出力する。** OpenCode 自体は Agent Skills
+  (`SKILL.md`)を `skill` ツール経由で読めるようになった(2026-10 時点。`.opencode/skills/`、
+  `~/.config/opencode/skills/` のほか `.claude/skills/`、`~/.agents/skills/` なども探索する)。
+  それでもこのビルドは `opencode` を対象にしたスキルをグローバルなコマンドとして出力するので、
   モデルが拾うのではなく人が打つ必要がある。自動発動してこそ価値がある資産なら、`targets` から
-  `opencode` を外す。
+  `opencode` を外す。同梱ファイルを持つスキルは 1 つのコマンドファイルに収まらないので、
+  `opencode` を対象にできない(`npm run validate` が拒否する)。
+- 上の探索場所に `~/.claude/skills/` と `~/.agents/skills/` が含まれるので、そこへリンクや
+  コピーで入れたスキルは OpenCode からもスキルとして見える。
 - **権限はツールを狭めるのではなく消す。** エージェントの `permission` ブロックに包括的な `deny` が
   あると、そのツールはエージェントから丸ごと消え、`tools: { bash: true }` でも戻らない。失敗は
   静かで、能力が無いままエージェントは成功を報告し続ける。明示的に許可し、実際のツール呼び出しを
@@ -45,7 +53,9 @@
 
 ## GitHub Copilot
 
-**導入。** `dist/copilot/.` を、資産を使いたいリポジトリの `.github/` にコピーする。
+**導入。** `dist/copilot/.` を、資産を使いたいリポジトリの `.github/` にコピーする。リリースに付く
+`copilot.zip` は直下が `skills/`、`prompts/`、`agents/` なので、`unzip copilot.zip -d .github/` で
+同じ配置になる。
 
 | 資産 | リポジトリ内の置き場 | ユーザーレベルの置き場 |
 | --- | --- | --- |

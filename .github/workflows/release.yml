@@ -31,24 +31,30 @@ jobs:
 
       # package.json is the single version source; validate.mjs already enforces that
       # plugin.json and marketplace.json agree with it. Here we only tie the tag to it.
+      # The tag is user input (workflow_dispatch), so it reaches the shell only via env.
       - name: Check the tag matches package.json
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
           pkg="v$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag $tag does not match package.json version $pkg"
+          if [ "$TAG" != "$pkg" ]; then
+            echo "::error::tag $TAG does not match package.json version $pkg"
             exit 1
           fi
 
       - name: Validate and check generated output
         run: npm run check
 
-      # Convenience payloads for the harnesses that install by copying files.
+      # Convenience payloads for the harnesses that install by copying files. Each archive
+      # is zipped from inside its directory, so its root is the harness layout itself
+      # (opencode: agent/, command/; copilot: skills/, prompts/, agents/) and it unpacks
+      # straight into ~/.config/opencode/ or .github/.
       - name: Package the per-harness distributions
         run: |
           mkdir -p artifacts
-          zip -r artifacts/opencode.zip dist/opencode
-          zip -r artifacts/copilot.zip dist/copilot
+          for h in opencode copilot; do
+            (cd "dist/$h" && zip -r -X "$GITHUB_WORKSPACE/artifacts/$h.zip" .)
+          done
 
       - name: Create the GitHub release
         uses: softprops/action-gh-release@v2

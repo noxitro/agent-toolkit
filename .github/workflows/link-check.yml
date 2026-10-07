@@ -13,12 +13,13 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   lychee:
     name: lychee
     runs-on: ubuntu-latest
+    outputs:
+      exit_code: ${{ steps.lychee.outputs.exit_code }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +38,43 @@ jobs:
             './**/*.md'
           fail: ${{ github.event_name == 'pull_request' }}
 
-      # A scheduled run does not fail the workflow; it files or updates one issue instead.
-      - name: Open an issue on failure
-        if: env.lychee_exit_code != '0' && github.event_name == 'schedule'
+      # The report is handed to the issue job, which is the only one allowed to write issues.
+      - name: Keep the report
+        if: steps.lychee.outputs.exit_code != '0' && github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lychee-report
+          path: lychee/out.md
+          if-no-files-found: error
+
+  # A scheduled run does not fail the workflow; it files one issue, or updates it while open.
+  issue:
+    name: Report broken links
+    needs: lychee
+    if: needs.lychee.outputs.exit_code != '0' && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lychee-report
+          path: lychee
+
+      - name: Find the open link-check issue
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search 'in:title "Link check failed"' --json number,title \
+            --jq '[.[] | select(.title == "Link check failed")][0].number // empty')"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: Link check failed
           content-filepath: ./lychee/out.md
+          issue-number: ${{ steps.existing.outputs.number }}
           labels: docs

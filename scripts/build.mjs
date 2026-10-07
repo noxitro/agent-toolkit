@@ -9,17 +9,27 @@
 //   dist/opencode/{agent,command}                      OpenCode global config payload
 //   dist/copilot/{skills,prompts,agents}               GitHub Copilot .github payload
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { OWNED_DIRS, ROOT, emit, isDir, loadAssets, validateAsset, walk } from './lib/toolkit.mjs'
+import { OWNED_DIRS, ROOT, emit, ensureRoot, loadAssets, scanTree, validateAsset } from './lib/toolkit.mjs'
 
 const check = process.argv.includes('--check')
 
-const assets = loadAssets()
-const problems = assets.flatMap(validateAsset)
+// Everything up to the rmSync below is read-only, so a wrong ROOT or a broken source tree
+// stops the build before any owned directory is touched.
+ensureRoot('build')
+
+const report = { problems: [], warnings: [] }
+const assets = loadAssets(report)
+const problems = [...report.problems, ...assets.flatMap(validateAsset)]
 if (problems.length) {
   console.error('Cannot build - fix these first (see `npm run validate`):')
   for (const p of problems) console.error(`  - ${p}`)
+  process.exit(1)
+}
+for (const w of report.warnings) console.warn(`warning: ${w}`)
+if (assets.length === 0) {
+  console.error(`Cannot build - no shared assets found under ${join(ROOT, 'shared')}. Nothing was changed.`)
   process.exit(1)
 }
 
@@ -36,14 +46,32 @@ for (const asset of assets) {
   }
 }
 
+/**
+ * Regular files currently in the owned directories, plus anything a build would never
+ * produce there: symlinks or special files, and empty directories.
+ */
 function currentFiles() {
   const found = new Map()
+  const strays = []
   for (const dir of OWNED_DIRS) {
     const abs = join(ROOT, dir)
-    if (!isDir(abs)) continue
-    for (const rel of walk(abs)) found.set(`${dir.split('\\').join('/')}/${rel}`, join(abs, rel))
+    const key = dir.split('\\').join('/')
+    let st
+    try {
+      st = lstatSync(abs)
+    } catch {
+      continue
+    }
+    if (!st.isDirectory()) {
+      strays.push(`${key} (${st.isSymbolicLink() ? 'symlink' : 'not a directory'})`)
+      continue
+    }
+    const tree = scanTree(abs)
+    for (const rel of tree.files) found.set(`${key}/${rel}`, join(abs, rel))
+    for (const o of tree.others) strays.push(`${key}/${o.path} (${o.type})`)
+    for (const d of tree.emptyDirs) strays.push(`${key}/${d}/ (empty directory)`)
   }
-  return found
+  return { found, strays }
 }
 
 function bytesFor(file) {
@@ -51,7 +79,7 @@ function bytesFor(file) {
 }
 
 if (check) {
-  const existing = currentFiles()
+  const { found: existing, strays } = currentFiles()
   const added = []
   const changed = []
   const removed = []
@@ -63,11 +91,12 @@ if (check) {
   }
   for (const path of existing.keys()) if (!planned.has(path)) removed.push(path)
 
-  if (added.length || changed.length || removed.length) {
+  if (added.length || changed.length || removed.length || strays.length) {
     console.error('Generated output is out of date. Run `npm run build` and commit the result.')
     for (const p of added) console.error(`  + missing   ${p}`)
     for (const p of changed) console.error(`  ~ stale     ${p}`)
     for (const p of removed) console.error(`  - orphaned  ${p}`)
+    for (const p of strays) console.error(`  ! stray     ${p}`)
     process.exit(1)
   }
   console.log(`Generated output is up to date (${planned.size} files from ${assets.length} shared assets).`)
