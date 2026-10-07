@@ -154,7 +154,8 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
-| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
+| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト、`m365-emu` の一巡。Python が PATH に無ければ Python のテストはスキップ) |
+| `node tools/m365-emu/run.mjs` | `m365-skill-pack` の Microsoft 365 側を opencode と無料モデルで模擬し、練習用フィクスチャで一巡させて採点する(ダブルクリックなら `tools/m365-emu/m365-emu.bat`)。手引きは [tools/m365-emu/README.md](tools/m365-emu/README.md) |
 
 ## CI
 
