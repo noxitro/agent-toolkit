@@ -19,8 +19,10 @@ ask for it before creating anything.
    - agent -> `shared/agents/<name>.md`
 3. Write the frontmatter with `name`, `description` and `targets`. Default `targets` to all
    three harnesses, but drop `opencode` for a skill that only makes sense when the model
-   triggers it on its own - OpenCode has no skill mechanism and would receive a slash command
-   nobody types. Put anything harness-specific under `harness.<name>.frontmatter`, never at
+   triggers it on its own - this toolkit emits skills to OpenCode as slash commands (even
+   though OpenCode itself can now load skills), so it would receive a command nobody types.
+   A skill with bundled files cannot target `opencode` at all: a single command file cannot
+   carry them, and `npm run validate` rejects it. Put anything harness-specific under `harness.<name>.frontmatter`, never at
    the top level.
 4. Draft the body. Keep it about intent and quality bars rather than step-by-step procedure,
    and use `{{ARGS}}` wherever the invocation arguments belong.

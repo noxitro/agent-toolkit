@@ -2,6 +2,7 @@
 // in references/bundle-format.md; keep this file and m365/skills/common/scripts/bundle_io.py
 // in agreement with that document.
 
+import { isAbsolute, sep } from 'node:path'
 import { BINARY_EXT, extOf } from './m365-rules.mjs'
 
 export const BUNDLE_MAGIC = '# m365-bundle v1'
@@ -15,14 +16,37 @@ export function unsafePathReason(p) {
   if (/^[A-Za-z]:/.test(p)) return 'drive letter in path'
   if (p.includes('\0')) return 'NUL in path'
   const segs = p.split('/')
+  // `_M365/...` would bypass every exact-case protocol check, and on a case-insensitive
+  // file system it is the same directory as `_m365/`.
+  if (segs[0] !== '_m365' && segs[0].toLowerCase() === '_m365') return 'case variant of the reserved _m365/ prefix'
   for (const s of segs) {
     if (s === '' ) return 'empty segment'
     if (s === '.' || s === '..') return `"${s}" segment`
     if (isGitSegment(s)) return '.git segment'
     if (/[:<>"|?*]/.test(s) || /[\x00-\x1f]/.test(s)) return 'reserved character in segment'
     if (/[. ]$/.test(s)) return 'segment ends with a dot or space'
+    // `### FILE <path> [flags]` would read the suffix as header flags.
+    if (/ \[[^\]]*\]$/.test(s)) return 'segment ends with " [...]", which the Markdown header reserves for flags'
+    if (isWindowsDeviceName(s)) return 'Windows reserved device name'
+    if (isShortName(s)) return '8.3 short-name pattern (~N) in segment'
   }
   return null
+}
+
+/**
+ * A name Windows could have generated as an 8.3 alias of another file (`PROGRA~1`,
+ * `FOO~2.TXT`): at most 8 characters up to `~<digits>` and an extension of at most 3.
+ * `notes~2024.md` or `backup~3.json` cannot be aliases and stay allowed.
+ */
+export function isShortName(seg) {
+  const m = /^([^.]*~\d+)(\.[^.]*)?$/.exec(seg)
+  return !!m && m[1].length <= 8 && (!m[2] || m[2].length <= 4)
+}
+
+/** CON, PRN, AUX, NUL, COM1-9, LPT1-9 in any letter case, with or without an extension. */
+export function isWindowsDeviceName(seg) {
+  const stem = seg.replace(/[. ]+$/, '').split('.')[0].replace(/ +$/, '')
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem)
 }
 
 /**
@@ -40,8 +64,41 @@ export function assertSafePath(p) {
   return p
 }
 
+/** Under the reserved `_m365/` prefix, in any letter case (unsafePathReason refuses the variants). */
 export function isProtocolPath(p) {
-  return p.startsWith(PROTOCOL_PREFIX)
+  return p.slice(0, PROTOCOL_PREFIX.length).toLowerCase() === PROTOCOL_PREFIX
+}
+
+/** Case- and normalisation-insensitive key, as the default macOS and Windows file systems compare names. */
+export function foldPath(p) {
+  return p.normalize('NFC').toLowerCase()
+}
+
+/**
+ * Why a set of delivered paths cannot be laid out on a case-insensitive file system, or
+ * null: two names that fold together, or a file that folds to the directory of another
+ * (Docs and docs/x.md). bundle_io.py refuses the same sets.
+ */
+export function foldCollision(paths) {
+  const byFold = new Map()
+  for (const p of paths) {
+    const k = foldPath(p)
+    if (byFold.has(k)) return `${byFold.get(k)} and ${p} differ only in letter case or Unicode normalisation`
+    byFold.set(k, p)
+  }
+  for (const p of paths) {
+    const segs = foldPath(p).split('/')
+    for (let k = 1; k < segs.length; k++) {
+      const prefix = segs.slice(0, k).join('/')
+      if (byFold.has(prefix)) return `${byFold.get(prefix)} is a file but is also the directory of ${p}`
+    }
+  }
+  return null
+}
+
+/** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
+export function escapes(rel) {
+  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
 }
 
 /** Task slugs name directories under .m365/, so they follow the same rule as make-input. */
@@ -56,6 +113,45 @@ export function isBinary(data, path = '') {
   const n = Math.min(data.length, 8192)
   for (let i = 0; i < n; i++) if (data[i] === 0) return true
   return false
+}
+
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/** Strict UTF-8 decode (BOM kept); null when the bytes are not valid UTF-8. */
+export function decodeUtf8(data) {
+  try {
+    return UTF8.decode(data)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The text normalisation formatBundle applies to every file: strict UTF-8, BOM dropped,
+ * CRLF and lone CR to LF. null when the bytes are not UTF-8. A sandbox that started from
+ * a Markdown bundle hashed exactly this, so the unpacker compares against it too.
+ */
+export function normaliseText(data) {
+  const text = decodeUtf8(data)
+  return text === null ? null : text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+/**
+ * Give new text bytes the BOM and line-ending style (CRLF or lone CR) of the local file
+ * they replace, so a file that differs from the snapshot only by that normalisation keeps
+ * its style. Line endings are restored only when every break in the local file had the
+ * same style: a mixed file has no single style to restore, so the new text keeps its own.
+ * Bytes that are not UTF-8 text are returned unchanged.
+ */
+export function restoreTextStyle(data, local) {
+  const text = decodeUtf8(data)
+  const localText = local ? decodeUtf8(local) : null
+  if (text === null || localText === null) return data
+  let out = text
+  if (localText.startsWith('\uFEFF') && !out.startsWith('\uFEFF')) out = `\uFEFF${out}`
+  const styles = new Set(localText.match(/\r\n|\r|\n/g) ?? [])
+  if (styles.size === 1 && !styles.has('\n')) out = out.replace(/\r?\n/g, [...styles][0])
+  return out === text ? data : Buffer.from(out, 'utf8')
 }
 
 function longestBacktickRun(text) {
@@ -95,7 +191,8 @@ export function formatBundle(spec) {
   out.push('')
   for (const f of files) {
     assertSafePath(f.path)
-    let text = f.data.toString('utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    let text = normaliseText(f.data)
+    if (text === null) throw new Error(`bundle: ${f.path} is not UTF-8 text`)
     const hasContent = text.length > 0
     const noeol = hasContent && !text.endsWith('\n')
     if (!noeol && text.endsWith('\n')) text = text.slice(0, -1)
@@ -181,12 +278,6 @@ export function parseBundle(text) {
     i = j
   }
   return { header, files, deletes, skipped }
-}
-
-/** Keep CRLF when the existing target file uses CRLF; new files get LF. */
-export function matchLineEndings(content, existing) {
-  if (existing && existing.includes('\r\n')) return content.replace(/\r?\n/g, '\r\n')
-  return content
 }
 
 /** Pull the machine-readable summary out of _m365/AUDIT.md. Returns null when absent or malformed. */

@@ -13,7 +13,7 @@
 
 | 役割 | Claude Code | OpenCode | GitHub Copilot |
 | --- | --- | --- | --- |
-| スキル | `skills/<name>/SKILL.md` | *(スキル機構が無いのでコマンドとして出力)* | `.github/skills/<name>/SKILL.md` |
+| スキル | `skills/<name>/SKILL.md` | `command/<name>.md` *(このツールキットはスキルをコマンドとして出力)* | `.github/skills/<name>/SKILL.md` |
 | コマンド / プロンプト | `commands/<name>.md` | `command/<name>.md` | `.github/prompts/<name>.prompt.md` |
 | サブエージェント | `agents/<name>.md` | `agent/<name>.md` | `.github/agents/<name>.agent.md` |
 | 配布 | プラグイン マーケットプレイス | `~/.config/opencode/` へコピー | `.github/` へコピー |

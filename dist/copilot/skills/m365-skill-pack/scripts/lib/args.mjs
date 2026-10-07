@@ -42,7 +42,8 @@ export function parseArgs(argv, spec) {
       val = argv[++i]
     }
     if (type === 'number') {
-      const n = Number(val)
+      // Number('') is 0, so a blank value (`--max-depth=`) is refused explicitly.
+      const n = val.trim() === '' ? NaN : Number(val)
       if (!Number.isFinite(n)) throw new Error(`--${key} must be a number`)
       opts[key] = n
     } else if (type === 'list') opts[key].push(val)
@@ -54,4 +55,23 @@ export function parseArgs(argv, spec) {
 export function usage(text, code = 1) {
   ;(code === 0 ? console.log : console.error)(text.trim())
   process.exit(code)
+}
+
+/**
+ * Report an uncaught error as `error: <message>` and exit 1, the code an uncaught throw
+ * gives anyway: the scripts refuse bad input (a malformed bundle, a missing file) by
+ * throwing, and a refusal needs no stack trace. An error that is not a plain Error
+ * (TypeError, RangeError, ...) is more likely a bug, so it says how to get the stack;
+ * M365_DEBUG=1 prints the stack for every error.
+ */
+export function installErrorHandler() {
+  process.on('uncaughtException', (e) => {
+    const debug = process.env.M365_DEBUG && process.env.M365_DEBUG !== '0'
+    if (debug) console.error(e?.stack ?? e)
+    else {
+      console.error(`error: ${e?.message ?? e}`)
+      if (e?.name && e.name !== 'Error') console.error(`  (${e.name}, unexpected: rerun with M365_DEBUG=1 for a stack trace)`)
+    }
+    process.exit(1)
+  })
 }

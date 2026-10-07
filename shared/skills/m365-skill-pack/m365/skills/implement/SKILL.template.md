@@ -22,7 +22,9 @@ All scripts are Python 3, standard library only, and run in the sandbox.
   auditor can still tell what changed). Without `--full` only the changed files ship.
 - `scripts/run_round.py start <workdir>` - begin a round (refuses past max rounds).
 - `scripts/run_round.py finish <workdir> --verdict PASS|FAIL [--notes ...]` - record the
-  round in `_m365/ROUNDS.md` and say whether to continue.
+  round in `_m365/ROUNDS.md` and say whether to continue. PASS is refused unless
+  `_m365/AUDIT.md` records PASS for this round, so without an audit only FAIL can be
+  recorded.
 
 Read `resources/bundle-format.md` if you need the exact file format.
 
@@ -34,7 +36,8 @@ Read `resources/bundle-format.md` if you need the exact file format.
    final answer, and still return a bundle.
 2. Start a round with `run_round.py start`.
 3. Change only files that match a `## Scope` pattern. Keep every `## Constraints` line.
-   Never introduce text matching a `## Forbidden patterns` entry. Prefer small, complete
+   No line of a file you change may match a `## Forbidden patterns` entry - the audit
+   checks the whole file, including lines that were there before. Prefer small, complete
    changes over broad rewrites. Do not rename or reformat files you were not asked to
    touch.
 4. Make every `AC-n` in `## Acceptance` true. Each one must be verifiable from the files

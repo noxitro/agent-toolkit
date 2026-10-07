@@ -12,9 +12,11 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { parseArgs, usage } from './lib/args.mjs'
+import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
 import { LIMITS, checkAgentInstructions, extractInstructions, validateSkillDir } from './lib/m365-rules.mjs'
 import { writeZip } from './lib/zip.mjs'
+
+installErrorHandler()
 
 const HELP = `
 Usage: node pack-skill.mjs <skill-dir>... [options]
@@ -29,6 +31,8 @@ Usage: node pack-skill.mjs <skill-dir>... [options]
   --keep-eol         do not normalise CRLF in scripts and text files
   --max-depth <n>    nested directories allowed (default ${LIMITS.defaultMaxDepth})
   --json             print a JSON summary instead of text
+
+Environment: M365_DEBUG=1 - print the stack trace with an error.
 `
 
 let args
@@ -82,6 +86,10 @@ for (const dirArg of positionals) {
   })
   totalFiles += v.entries.length
   const name = v.name ?? basename(dir)
+  // The name picks the zip file (and the --wrap prefix), so two skills sharing one would
+  // silently overwrite each other's package.
+  const twin = results.find((r) => r.name === name)
+  if (twin) v.problems.push(`${dirArg}: \`name: ${name}\` is also used by ${twin.dir}; every skill needs its own name`)
   const result = { dir: dirArg, name, files: v.entries.length, problems: v.problems, warnings: v.warnings, notices: v.notices, skipped: v.skipped }
   if (!v.problems.length) {
     const zip = writeZip(v.entries, { store: opts.store, wrap: opts.wrap ? name : null })

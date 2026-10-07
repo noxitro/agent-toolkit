@@ -13,9 +13,14 @@ verdict.
 
 - `scripts/audit_checks.py check <workdir>` - runs the deterministic checks against
   `_m365/TASK.md` and `_m365/manifest.json`, prints JSON with `checks`, `changed` and the
-  list of `acceptance` ids, and writes `_m365/checks.json`.
+  list of `acceptance` ids, and writes `_m365/checks.json`. `forbidden` checks every
+  line of each changed file, including lines that were there before the change. It
+  stops with an error when `## Scope` or `## Acceptance` has text but no readable item;
+  report that instead of auditing.
 - `scripts/audit_checks.py report <workdir> --round N --ac AC-1=PASS --ac "AC-2=FAIL:why" ...`
-  merges the checks with your judgements and rewrites `_m365/AUDIT.md`.
+  re-runs the checks, merges them with your judgements and rewrites `_m365/AUDIT.md`.
+  When the task legitimately changes nothing, pass `--allow-empty` to both `check` and
+  `report`.
 - `scripts/bundle_io.py unpack <bundle> <workdir>` / `pack <workdir> <out> --kind audit` -
   only needed when the thing to audit arrived as an attachment rather than as a working
   directory you already have. `unpack` recognises an output bundle on its own: when it

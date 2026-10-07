@@ -48,6 +48,7 @@ Rules:
 - `verdict` at the top is the verdict of the latest round. `final_round` is that round's
   number.
 - Check ids `syntax`, `json`, `scope`, `forbidden`, `files` are deterministic; `AC-n`
-  are judgements. `status` is `PASS` or `FAIL`. A FAIL carries a `detail` naming the
-  file and line where possible.
+  are judgements. `forbidden` covers every line of each added or modified text file,
+  not only the lines the change introduced. `status` is `PASS` or `FAIL`. A FAIL
+  carries a `detail` naming the file and line where possible.
 - Earlier rounds are preserved when a new round is reported.

@@ -4,11 +4,14 @@
 import { inflateRawSync } from 'node:zlib'
 import { crc32 } from './zip.mjs'
 
-/** Output bundles are small; anything bigger than the Agent Builder package limit is suspect. */
-const MAX_ENTRY_BYTES = 64 * 1024 * 1024
-/** Caps checked from the central directory before anything is inflated. */
-const MAX_ENTRIES = 10_000
-const MAX_TOTAL_BYTES = 256 * 1024 * 1024
+/**
+ * Output bundles are small; anything bigger than the Agent Builder package limit is suspect.
+ * Caps checked from the central directory before anything is inflated. bundle_io.py uses
+ * the same numbers, and make-input.mjs refuses to write a ZIP that exceeds them.
+ */
+export const MAX_ENTRY_BYTES = 64 * 1024 * 1024
+export const MAX_ENTRIES = 10_000
+export const MAX_TOTAL_BYTES = 256 * 1024 * 1024
 
 /**
  * @param {Buffer} buf

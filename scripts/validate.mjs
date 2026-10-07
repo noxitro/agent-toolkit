@@ -4,12 +4,16 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ROOT, isDir, loadAssets, validateAsset } from './lib/toolkit.mjs'
+import { ROOT, ensureRoot, isDir, loadAssets, relPath, validateAsset } from './lib/toolkit.mjs'
 
-const problems = []
+ensureRoot('validate')
+
+const report = { problems: [], warnings: [] }
+const problems = report.problems
 
 // ---------------------------------------------------------------- shared assets
-const assets = loadAssets()
+const assets = loadAssets(report)
+if (assets.length === 0 && problems.length === 0) problems.push(`shared/: no assets found under ${join(ROOT, 'shared')}`)
 for (const asset of assets) problems.push(...validateAsset(asset))
 
 // An asset that hardcodes a machine-specific absolute path cannot be published, and has to
@@ -19,11 +23,23 @@ const MACHINE_PATHS = [
   { re: /(?:^|[\s"'`(=])[A-Za-z]:[\\/]/, what: 'a drive-letter absolute path' },
   { re: /\/(?:home|Users)\/[A-Za-z0-9._-]+\//, what: 'a user home absolute path' },
 ]
-for (const asset of assets) {
-  const haystack = `${asset.data.description ?? ''}\n${asset.body}`
-  for (const line of haystack.split('\n'))
+// Every text file of the asset is scanned: the whole source file (frontmatter included, so
+// harness.<target>.frontmatter is covered) and each bundled file of a skill. Files with a
+// NUL byte are treated as binary and skipped.
+function scanForMachinePaths(at, text) {
+  text.split(/\r?\n/).forEach((line, i) => {
     for (const { re, what } of MACHINE_PATHS)
-      if (re.test(line)) problems.push(`${asset.sourceFile}: ${what} is hardcoded - use a registry or an argument instead: ${line.trim()}`)
+      if (re.test(line)) problems.push(`${at}:${i + 1}: ${what} is hardcoded - use a registry or an argument instead: ${line.trim()}`)
+  })
+}
+for (const asset of assets) {
+  scanForMachinePaths(asset.sourceFile, asset.text ?? `${asset.data.description ?? ''}\n${asset.body}`)
+  for (const rel of asset.extraFiles) {
+    const abs = join(asset.sourceDir, rel)
+    const bytes = readFileSync(abs)
+    if (bytes.includes(0)) continue
+    scanForMachinePaths(relPath(abs), bytes.toString('utf8'))
+  }
 }
 
 // A skill and a command with the same name collide once the skill is emitted as an
@@ -95,6 +111,7 @@ if (marketplace) {
 }
 
 // ---------------------------------------------------------------------- report
+for (const w of report.warnings) console.warn(`warning: ${w}`)
 if (problems.length) {
   console.error(`${problems.length} problem(s) found:`)
   for (const p of problems) console.error(`  - ${p}`)

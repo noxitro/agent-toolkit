@@ -45,7 +45,9 @@ where the build copies it verbatim into the emitted file.
    every turn, so each extra asset dilutes trigger accuracy for all the others. Ship what is
    actually used.
 4. **Write arguments as `{{ARGS}}`.** The build substitutes the native placeholder per
-   harness (`$ARGUMENTS`, or `${input:args}` for Copilot prompt files). Text that has to
+   harness (the dollar-sign `ARGUMENTS` variable on Claude Code and OpenCode, the `input:args`
+   variable on Copilot prompt files). Never spell a native placeholder out in prose: the harness
+   substitutes it at invocation, wherever it appears. Text that has to
    *mention* the token - like this sentence - writes `{{literal:` + `ARGS}}`, which the build
    emits as the literal token on every harness.
 5. **Reference bundled files by relative path.** Extra files in a skill directory
@@ -54,10 +56,13 @@ where the build copies it verbatim into the emitted file.
 
 ## Portability traps
 
-- **OpenCode has no skill mechanism.** A skill targeting `opencode` is emitted as a global
-  command instead, so it becomes explicitly invoked (`/name`) rather than model-triggered.
+- **This toolkit emits skills to OpenCode as commands.** OpenCode can now load Agent Skills
+  through its own `skill` tool, but the build still emits a skill targeting `opencode` as a
+  global command, so there it is explicitly invoked (`/name`) rather than model-triggered.
   If an asset only makes sense when the model picks it up on its own, drop `opencode` from
-  `targets` rather than shipping a command nobody will type.
+  `targets` rather than shipping a command nobody will type. A skill with bundled files
+  cannot target `opencode`: one command file cannot carry them, and `npm run validate`
+  rejects it.
 - **OpenCode permissions delete tools rather than narrow them.** A catch-all `deny` in an
   agent's `permission` block removes the tool from the agent entirely, and `tools: { bash: true }`
   does not bring it back. The failure is silent: the agent reports success while never having

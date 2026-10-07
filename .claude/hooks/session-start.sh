@@ -22,6 +22,8 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 # フックは同期で走るので、GitHub の応答が止まったときにセッションの開始を待たせ続けない。
+# 各手順を 60 秒で打ち切る。settings.json の timeout (300 秒) はその合計より長く取ってあり、
+# フック全体が途中で殺されて install.sh まで届かない、ということが起きないようにしている。
 limited() {
   if command -v timeout >/dev/null 2>&1; then timeout 60 "$@"; else "$@"; fi
 }
@@ -48,7 +50,7 @@ fi
 
 # install.sh は実行した場所のリポジトリに残った旧方式の core.hooksPath も外すので、リポジトリの中で呼ぶ。
 cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || true
-sh "$dir/git-hooks/install.sh" || echo "session-start: install.sh が失敗した。フックは無効のまま" >&2
-sh "$dir/git-hooks/install-gitleaks.sh" >/dev/null ||
+limited sh "$dir/git-hooks/install.sh" || echo "session-start: install.sh が失敗した。フックは無効のまま" >&2
+limited sh "$dir/git-hooks/install-gitleaks.sh" >/dev/null ||
   echo "session-start: gitleaks の取得か検証に失敗した。組み込みパターンのみで検査する" >&2
 exit 0

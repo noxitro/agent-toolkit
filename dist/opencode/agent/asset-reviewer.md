@@ -1,9 +1,10 @@
 ---
 description: Read-only reviewer for shared agent assets. Use before publishing a new or changed skill, command or agent to check the shared contract, trigger quality of the description, and the per-harness portability traps.
 mode: subagent
-tools:
-  write: false
-  edit: false
+permission:
+  edit: deny
+  bash: deny
+  webfetch: deny
 ---
 
 <!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/agents/asset-reviewer.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
@@ -26,7 +27,8 @@ selection for both. Flag descriptions that would fire on unrelated work, and des
 narrow that the asset will never fire at all.
 
 **Portability.** For every harness in `targets`, ask whether the asset actually works there:
-a skill emitted to OpenCode becomes a slash command and loses model-triggered activation; an
+this toolkit emits a skill to OpenCode as a slash command (OpenCode's own skill tool is not
+used), so there it loses model-triggered activation; an
 OpenCode agent whose `permission` block has a catch-all `deny` loses the tool entirely rather
 than having it narrowed, and fails silently; Copilot prompt files are workspace-scoped unless
 installed at the user level; hooks never travel between harnesses.

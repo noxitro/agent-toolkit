@@ -40,6 +40,10 @@ export function dosDateTime(date) {
 export function writeZip(entries, opts = {}) {
   const { store = false, wrap = null, mtime = Date.UTC(1980, 0, 1) } = opts
   const { time, date } = dosDateTime(mtime)
+  // Checked before the header fields are written: writeUInt16LE/32LE would otherwise throw
+  // a bare RangeError first.
+  const tooBig = () => new Error('zip: archive exceeds the non-ZIP64 limits (65535 entries, 4 GiB)')
+  if (entries.length > 0xffff) throw tooBig()
   const locals = []
   const centrals = []
   let offset = 0
@@ -59,6 +63,8 @@ export function writeZip(entries, opts = {}) {
         payload = packed
       }
     }
+
+    if (raw.length > 0xffffffff || offset > 0xffffffff) throw tooBig()
 
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
@@ -98,6 +104,7 @@ export function writeZip(entries, opts = {}) {
   }
 
   const cdSize = centrals.reduce((n, b) => n + b.length, 0)
+  if (offset > 0xffffffff || offset + cdSize > 0xffffffff) throw tooBig()
   const eocd = Buffer.alloc(22)
   eocd.writeUInt32LE(0x06054b50, 0)
   eocd.writeUInt16LE(0, 4)
@@ -108,6 +115,5 @@ export function writeZip(entries, opts = {}) {
   eocd.writeUInt32LE(offset, 16)
   eocd.writeUInt16LE(0, 20)
 
-  if (entries.length > 0xffff || offset + cdSize > 0xffffffff) throw new Error('zip: archive exceeds the non-ZIP64 limits')
   return Buffer.concat([...locals, ...centrals, eocd])
 }

@@ -8,13 +8,21 @@ Usage:
     python3 bundle_io.py unpack <bundle> <workdir> [--kind auto|input|output]
         Extract a .zip or Markdown bundle. Repository files go to <workdir>/, protocol
         files (_m365/...) to <workdir>/_m365/. Writes <workdir>/_m365/manifest.json with
-        the sha256 of every repository file so that later changes can be detected.
-        An unsafe path anywhere in the bundle aborts before anything is written.
+        the sha256 of every repository file (except under SKIP_DIRS, which are never
+        walked) so that later changes can be detected. An unsafe path anywhere in the
+        bundle, a path that is both a file and a directory (a and a/b, also against
+        the existing workdir), or two delivered paths that differ only in letter case or
+        Unicode normalisation (as unpack-output.mjs refuses them), aborts before anything
+        is written.
         --kind output (auto-detected for output bundles): the auditor's view. A bundle
         from `pack --full` carries the input manifest, which is kept so that `status`
         shows the real changes; a bundle without one gets an empty manifest and every
-        repository file in it counts as a change. The bundle's _m365/AUDIT.md is kept
-        as _m365/AUDIT.implementer.md so that the auditor's report starts fresh.
+        repository file in it counts as a change. A carried manifest marks a bundle as
+        output even without AUDIT.md, ROUNDS.md or DELETED.txt. Files a Markdown bundle
+        lists under "## Skipped" (binary) are dropped from the carried manifest, so they
+        do not show as deleted; their changes cannot be seen (use a ZIP bundle for
+        those). The bundle's _m365/AUDIT.md is kept as _m365/AUDIT.implementer.md so
+        that the auditor's report starts fresh.
 
     python3 bundle_io.py status <workdir>
         Print {"added": [...], "modified": [...], "deleted": [...], "unchanged": N}
@@ -26,7 +34,9 @@ Usage:
         files, the deletions, and every _m365/ file except manifest.json and state.json.
         --full (what the agent instructions use) holds every repository file plus the
         input manifest.json, so an independent auditor can tell real changes from
-        untouched files. --kind audit packs only _m365/AUDIT.md.
+        untouched files. --kind audit packs only _m365/AUDIT.md. Paths that the local
+        unpacker would refuse (unsafe, or folding together by case or Unicode
+        normalisation) abort the pack before the bundle is written.
 
 Exit codes: 0 success, 1 error (message on stderr).
 """
@@ -40,6 +50,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import zipfile
 import zlib
 
@@ -53,11 +64,13 @@ TASK_PATH = "_m365/TASK.md"
 AUDIT_PATH = "_m365/AUDIT.md"
 IMPL_AUDIT_PATH = "_m365/AUDIT.implementer.md"
 MANIFEST_SCHEMA = "m365-manifest/1"
-SKIP_DIRS = ("__pycache__", ".git")
+# Same list as JUNK_DIRS in scripts/lib/m365-rules.mjs: never walked, packed or hashed.
+SKIP_DIRS = ("__pycache__", ".git", "node_modules", ".pytest_cache", ".mypy_cache")
 # Never packed from the working directory: bookkeeping, and DELETED.txt which pack
 # regenerates from the manifest.
 PACK_EXCLUDE = (MANIFEST_PATH, STATE_PATH, DELETED_PATH)
-# A ZIP holding any of these came out of a round, not out of make-input.mjs.
+# A ZIP holding any of these came out of a round, not out of make-input.mjs. So does
+# one carrying a valid MANIFEST_PATH (pack --full): make-input.mjs never writes one.
 OUTPUT_MARKERS = (AUDIT_PATH, "_m365/ROUNDS.md", DELETED_PATH)
 
 # Same list as BINARY_EXT in scripts/lib/m365-rules.mjs.
@@ -79,6 +92,8 @@ SECTION_RE = re.compile(r"^### (FILE|DELETE) (.+?)(?: \[([a-z,]+)\])?$")
 SKIPPED_RE = re.compile(r"^- (.+?) \((.+)\)$")
 FENCE_OPEN_RE = re.compile(r"^(`{3,})")
 DRIVE_RE = re.compile(r"^[A-Za-z]:")
+# "notes [draft]" would read back as "### FILE notes" with flags "draft".
+FLAG_LIKE_RE = re.compile(r" \[[^\]]*\]$")
 TASK_RE = re.compile(r"^# TASK\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s*$", re.M)
 
 
@@ -99,7 +114,12 @@ def unsafe_path_reason(p):
         return "drive letter in path"
     if "\0" in p:
         return "NUL in path"
-    for seg in p.split("/"):
+    segs = p.split("/")
+    # _M365/... would bypass every exact-case protocol check, and on a case-insensitive
+    # file system it is the same directory as _m365/.
+    if segs[0] != PROTOCOL_DIR and segs[0].lower() == PROTOCOL_DIR:
+        return "case variant of the reserved _m365/ prefix"
+    for seg in segs:
         if seg == "":
             return "empty segment"
         if seg in (".", ".."):
@@ -110,11 +130,34 @@ def unsafe_path_reason(p):
             return "reserved character in segment"
         if seg[-1] in ". ":
             return "segment ends with a dot or space"
+        if FLAG_LIKE_RE.search(seg):
+            return 'segment ends in " [...]" (reads as Markdown bundle flags)'
+        if is_windows_device_name(seg):
+            return "Windows reserved device name"
+        if is_short_name(seg):
+            return "8.3 short-name pattern (~N) in segment"
     return None
 
 
 RESERVED_CHAR_RE = re.compile(r'[:<>"|?*\x00-\x1f]')
 GIT_SHORT_RE = re.compile(r"^git~[0-9]+$")
+# Same rules as isWindowsDeviceName and the ~N check in scripts/lib/bundle.mjs, so the
+# sandbox refuses at pack time what a Windows checkout would refuse at unpack time.
+DEVICE_NAME_RE = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.I)
+SHORT_NAME_RE = re.compile(r"^([^.]*~[0-9]+)(\.[^.]*)?$")
+
+
+def is_short_name(seg):
+    """A name Windows could have generated as an 8.3 alias (PROGRA~1, FOO~2.TXT): at most
+    8 characters up to ~<digits> and an extension of at most 3, as in bundle.mjs."""
+    m = SHORT_NAME_RE.match(seg)
+    return bool(m) and len(m.group(1)) <= 8 and (m.group(2) is None or len(m.group(2)) <= 4)
+
+
+def is_windows_device_name(seg):
+    """CON, PRN, AUX, NUL, COM1-9, LPT1-9 in any letter case, with or without an extension."""
+    stem = seg.rstrip(". ").split(".")[0].rstrip(" ")
+    return bool(DEVICE_NAME_RE.match(stem))
 
 
 def is_git_segment(seg):
@@ -131,7 +174,59 @@ def assert_safe_path(p):
 
 
 def is_protocol_path(p):
-    return p.startswith(PROTOCOL_PREFIX)
+    """Under the reserved _m365/ prefix, in any letter case (unsafe_path_reason refuses the variants)."""
+    return p[:len(PROTOCOL_PREFIX)].lower() == PROTOCOL_PREFIX
+
+
+def fold_path(p):
+    """Case- and normalisation-insensitive key, as foldPath in scripts/lib/bundle.mjs
+    (NFC, then lower case): how the default macOS and Windows file systems compare names."""
+    return unicodedata.normalize("NFC", p).lower()
+
+
+def in_skip_dir(p):
+    return any(seg in SKIP_DIRS for seg in p.split("/")[:-1])
+
+
+def assert_no_file_dir_clash(paths):
+    """Refuse a set where one path is a directory of another (a and a/b): writing both
+    fails half-way, so this runs before anything is written."""
+    files = set(paths)
+    for p in sorted(files):
+        parts = p.split("/")
+        for k in range(1, len(parts)):
+            prefix = "/".join(parts[:k])
+            if prefix in files:
+                raise BundleError("%s is both a file and the directory of %s" % (prefix, p))
+
+
+def assert_no_fold_collision(paths, hint=""):
+    """Refuse delivered paths that fold to one name, or a file that folds to the directory
+    of another (Docs and docs/x.md): the local unpacker refuses such a bundle whole.
+    Deletions are not passed in, since one that folds to a delivered path is a rename."""
+    by_fold = {}
+    for p in paths:
+        k = fold_path(p)
+        if k in by_fold:
+            raise BundleError("%s and %s differ only in letter case or Unicode normalisation%s" % (by_fold[k], p, hint))
+        by_fold[k] = p
+    for p in paths:
+        segs = fold_path(p).split("/")
+        for k in range(1, len(segs)):
+            prefix = "/".join(segs[:k])
+            if prefix in by_fold:
+                raise BundleError("%s is delivered as a file but is also the directory of %s%s" % (by_fold[prefix], p, hint))
+
+
+def parse_manifest_bytes(data):
+    """The manifest dict when data is a valid m365-manifest/1 file, else None."""
+    try:
+        m = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if isinstance(m, dict) and m.get("schema") == MANIFEST_SCHEMA and isinstance(m.get("files"), dict):
+        return m
+    return None
 
 
 def ext_of(name):
@@ -462,7 +557,8 @@ def read_bundle(bundle_path):
                     line = line.strip()
                     if line:
                         deletes.append(assert_safe_path(line))
-        is_output = any(p in OUTPUT_MARKERS for p, _ in files)
+        is_output = any(p in OUTPUT_MARKERS or (p == MANIFEST_PATH and parse_manifest_bytes(d) is not None)
+                        for p, d in files)
         file_paths = set(p for p, _ in files)
         seen_del = set()
         for d in deletes:
@@ -473,6 +569,10 @@ def read_bundle(bundle_path):
             if d in seen_del:
                 raise BundleError("%s is listed for deletion twice" % d)
             seen_del.add(d)
+        # Deletions are only recorded, never written, so a deleted file may become a
+        # directory (docs -> docs/index.md); only delivered paths can clash.
+        assert_no_file_dir_clash(list(file_paths))
+        assert_no_fold_collision([p for p, _ in files])
         return {"encoding": "zip", "header": {}, "files": files, "deletes": deletes,
                 "skipped": [], "detected_kind": "output" if is_output else "input"}
     try:
@@ -484,7 +584,15 @@ def read_bundle(bundle_path):
         raise BundleError('%s is neither a ZIP file nor a Markdown bundle (first line must be "%s")'
                           % (bundle_path, BUNDLE_MAGIC))
     b = parse_markdown(text)
-    kind = b["header"].get("kind", "input")
+    for d in b["deletes"]:
+        if is_protocol_path(d):
+            raise BundleError("bundle deletes a protocol path: %s" % d)
+    assert_no_file_dir_clash([p for p, _ in b["files"]])
+    assert_no_fold_collision([p for p, _ in b["files"]])
+    kind = b["header"].get("kind")
+    if kind is None:
+        carried = any(p == MANIFEST_PATH and parse_manifest_bytes(d) is not None for p, d in b["files"])
+        kind = "output" if carried else "input"
     return {"encoding": "markdown", "header": b["header"], "files": b["files"], "deletes": b["deletes"],
             "skipped": b["skipped"], "detected_kind": "input" if kind == "input" else "output"}
 
@@ -503,12 +611,7 @@ def cmd_unpack(args):
     carried_manifest = None
     for p, d in proto_files:
         if p == MANIFEST_PATH:
-            try:
-                m = json.loads(d.decode("utf-8"))
-                if isinstance(m, dict) and m.get("schema") == MANIFEST_SCHEMA and isinstance(m.get("files"), dict):
-                    carried_manifest = m
-            except (ValueError, UnicodeDecodeError):
-                pass
+            carried_manifest = parse_manifest_bytes(d)
             if carried_manifest is None:
                 sys.stderr.write("warning: the bundle carries an unreadable %s; it is replaced\n" % MANIFEST_PATH)
     proto_files = [(p, d) for p, d in proto_files if p != MANIFEST_PATH]
@@ -519,11 +622,28 @@ def cmd_unpack(args):
         proto_files = [(IMPL_AUDIT_PATH if p == AUDIT_PATH else p, d) for p, d in proto_files]
         renamed_audit = True
 
+    # Everything this unpack writes, checked against itself and the existing workdir
+    # before the first byte goes out, so that a clash cannot leave half a bundle behind.
+    targets = [p for p, _ in repo_files] + [p for p, _ in proto_files] + [MANIFEST_PATH]
+    if bundle["encoding"] == "markdown" and bundle["deletes"]:
+        targets.append(DELETED_PATH)
+    assert_no_file_dir_clash(targets)
+    for path in targets:
+        parts = path.split("/")
+        for k in range(1, len(parts)):
+            prefix = native(workdir, "/".join(parts[:k]))
+            if os.path.lexists(prefix) and not os.path.isdir(prefix):
+                raise BundleError("cannot unpack %s: %s exists in %s and is not a directory"
+                                  % (path, "/".join(parts[:k]), workdir))
+        if os.path.isdir(native(workdir, path)):
+            raise BundleError("cannot unpack %s: a directory of that name exists in %s" % (path, workdir))
+
     os.makedirs(workdir, exist_ok=True)
     hashes = {}
     for path, data in repo_files:
         write_bytes(native(workdir, path), data)
-        hashes[path] = sha256_hex(data)
+        if not in_skip_dir(path):  # status never walks these, so they would read as deleted
+            hashes[path] = sha256_hex(data)
     for path, data in proto_files:
         write_bytes(native(workdir, path), data)
     removed = []
@@ -542,8 +662,17 @@ def cmd_unpack(args):
     if task is None:
         task = bundle["header"].get("task") or None
 
+    not_carried = []
     if kind == "output":
-        base = dict(sorted(carried_manifest["files"].items())) if carried_manifest else {}
+        base = dict(sorted((p, h) for p, h in carried_manifest["files"].items() if not in_skip_dir(p))) \
+            if carried_manifest else {}
+        # A Markdown bundle cannot carry binary files and lists them under "## Skipped".
+        # They are still in the repository, so they must not count as deleted.
+        delivered = set(p for p, _ in repo_files)
+        for p, _ in bundle["skipped"]:
+            if p in base and p not in delivered:
+                del base[p]
+                not_carried.append(p)
         if task is None and carried_manifest:
             task = carried_manifest.get("task") or None
     else:
@@ -564,6 +693,9 @@ def cmd_unpack(args):
     if bundle["skipped"]:
         print("  skipped by the packer (not in this bundle): %s"
               % ", ".join("%s (%s)" % s for s in bundle["skipped"]))
+    if not_carried:
+        print("  not carried, left out of the manifest (status cannot tell whether they changed): %s"
+              % ", ".join(not_carried))
     if renamed_audit:
         print("  %s from the bundle saved as %s; a new audit report starts fresh" % (AUDIT_PATH, IMPL_AUDIT_PATH))
     if kind == "output" and carried_manifest:
@@ -635,6 +767,13 @@ def cmd_pack(args):
         paths = repo + proto
         if AUDIT_PATH not in proto:
             sys.stderr.write("warning: no %s; the local unpacker will report no verdict\n" % AUDIT_PATH)
+
+    # Everything the local unpacker would refuse stops the pack here, before the output
+    # file is opened, so that a refusal never leaves half a ZIP behind.
+    for p in paths + deletes:
+        assert_safe_path(p)
+    assert_no_fold_collision(paths + ([DELETED_PATH] if deletes and encoding == "zip" else []),
+                             hint="; rename or remove one of them before packing")
 
     packed = []
     skipped = []

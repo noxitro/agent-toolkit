@@ -154,33 +154,45 @@ export function validateSkillDir(dir, opts = {}) {
   }
 
   const skillFileName = fromTemplate ? 'SKILL.template.md' : 'SKILL.md'
-  const files = new Map()
-  for (const f of raw) {
-    if (f.symlink) {
-      problems.push(`${label}: ${f.rel} is a symbolic link; copy the real file instead`)
-      continue
+  // The same symlink / junk / SKILL.* rules for the skill directory and for common/;
+  // `prefix` only labels where a common/ entry came from.
+  const sift = (walked, prefix, isCommon) => {
+    const kept = []
+    for (const f of walked) {
+      if (f.symlink) {
+        problems.push(`${label}: ${prefix}${f.rel} is a symbolic link; copy the real file instead`)
+        continue
+      }
+      if (f.junkDir) {
+        skipped.push(`${prefix}${f.rel}/ (junk directory)`)
+        continue
+      }
+      const base = f.rel.slice(f.rel.lastIndexOf('/') + 1)
+      if (JUNK_NAMES.has(base) || JUNK_EXT.has(extOf(base))) {
+        skipped.push(`${prefix}${f.rel} (junk)`)
+        continue
+      }
+      if (isCommon && (f.rel === 'SKILL.md' || f.rel === 'SKILL.template.md')) {
+        problems.push(`${label}: ${prefix}${f.rel} would collide with the skill's own SKILL.md; common/ cannot carry one`)
+        continue
+      }
+      // Only the root SKILL.md competes with SKILL.template.md; a nested one is ordinary content.
+      if (fromTemplate && f.rel === 'SKILL.md') {
+        problems.push(`${label}: both SKILL.md and SKILL.template.md exist; keep one`)
+        continue
+      }
+      kept.push(f)
     }
-    if (f.junkDir) {
-      skipped.push(`${f.rel}/ (junk directory)`)
-      continue
-    }
-    const base = f.rel.slice(f.rel.lastIndexOf('/') + 1)
-    if (JUNK_NAMES.has(base) || JUNK_EXT.has(extOf(base))) {
-      skipped.push(`${f.rel} (junk)`)
-      continue
-    }
-    if (fromTemplate && base === 'SKILL.md') {
-      problems.push(`${label}: both SKILL.md and SKILL.template.md exist; keep one`)
-      continue
-    }
-    files.set(f.rel, f)
+    return kept
   }
+  const files = new Map()
+  for (const f of sift(raw, '', false)) files.set(f.rel, f)
 
   // Common files are merged in under the same validation.
   if (commonDir) {
     let common = []
     try {
-      common = walkDir(commonDir, commonDir, [], null).filter((f) => !f.symlink && !f.junkDir)
+      common = sift(walkDir(commonDir, commonDir, [], null), 'common/', true)
     } catch (e) {
       problems.push(`${label}: common directory unreadable - ${e.message}`)
     }
@@ -205,10 +217,10 @@ export function validateSkillDir(dir, opts = {}) {
   for (const [rel, f] of files) {
     const outName = rel === skillFileName ? 'SKILL.md' : rel
     const ext = extOf(outName)
-    const base = outName.slice(outName.lastIndexOf('/') + 1)
 
-    if (base.startsWith('.')) {
-      problems.push(`${label}: ${rel} is a dotfile; Microsoft 365 skills cannot carry it`)
+    // Every segment: a file under .hidden/ is as unpackable as a top-level dotfile.
+    if (outName.split('/').some((seg) => seg.startsWith('.'))) {
+      problems.push(`${label}: ${rel} is a dotfile or lies in a dot-directory; Microsoft 365 skills cannot carry it`)
       continue
     }
     if (WINDOWS_SCRIPT_EXT.has(ext)) {
