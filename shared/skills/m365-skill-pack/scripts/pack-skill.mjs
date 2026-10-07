@@ -12,9 +12,11 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { parseArgs, usage } from './lib/args.mjs'
+import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
 import { LIMITS, checkAgentInstructions, extractInstructions, validateSkillDir } from './lib/m365-rules.mjs'
 import { writeZip } from './lib/zip.mjs'
+
+installErrorHandler()
 
 const HELP = `
 Usage: node pack-skill.mjs <skill-dir>... [options]
@@ -29,6 +31,8 @@ Usage: node pack-skill.mjs <skill-dir>... [options]
   --keep-eol         do not normalise CRLF in scripts and text files
   --max-depth <n>    nested directories allowed (default ${LIMITS.defaultMaxDepth})
   --json             print a JSON summary instead of text
+
+Environment: M365_DEBUG=1 - print the stack trace with an error.
 `
 
 let args

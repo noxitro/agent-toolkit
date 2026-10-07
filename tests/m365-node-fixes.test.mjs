@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { parseArgs } from '../shared/skills/m365-skill-pack/scripts/lib/args.mjs'
-import { formatBundle, parseBundle, unsafePathReason } from '../shared/skills/m365-skill-pack/scripts/lib/bundle.mjs'
+import { formatBundle, isProtocolPath, parseBundle, restoreTextStyle, unsafePathReason } from '../shared/skills/m365-skill-pack/scripts/lib/bundle.mjs'
 import { validateSkillDir } from '../shared/skills/m365-skill-pack/scripts/lib/m365-rules.mjs'
 import { MAX_ENTRY_BYTES, readZip } from '../shared/skills/m365-skill-pack/scripts/lib/unzip.mjs'
 import { writeZip } from '../shared/skills/m365-skill-pack/scripts/lib/zip.mjs'
@@ -173,15 +173,15 @@ test('unpack-output.mjs: BOM + CRLF local file matches a normalised baseline and
   assert.equal(readFileSync(join(repo, 'notes.txt'), 'utf8'), '﻿a\r\nc\r\n')
 })
 
-test('unpack-output.mjs: a lone-CR file untouched in the sandbox is kept, not a conflict', () => {
+test('unpack-output.mjs: a lone-CR file untouched in the sandbox is left alone, not a conflict', () => {
   const repo = repoWith({ 'old.txt': 'a\rb\r', 'bom.md': '﻿# t\n' })
   const zip = outZip(repo, { 'old.txt': 'a\nb\n', 'bom.md': '# t\n' }, { baseline: { 'old.txt': 'a\nb\n', 'bom.md': '# t\n' } })
   const r = unpack(repo, zip)
   assert.equal(r.status, 0, r.stdout)
   const j = JSON.parse(r.stdout)
   assert.deepEqual(j.conflicts, [])
-  assert.deepEqual(j.kept, ['old.txt'])
-  assert.deepEqual(j.unchanged, ['bom.md'], 'with its BOM restored the delivered file is identical')
+  assert.deepEqual(j.kept, [])
+  assert.deepEqual(j.unchanged, ['old.txt', 'bom.md'], 'with its lone CR or BOM restored the delivered file is identical')
   assert.equal(readFileSync(join(repo, 'old.txt'), 'utf8'), 'a\rb\r')
 })
 
@@ -324,4 +324,91 @@ test('make-input.mjs: a Markdown bundle skips non-UTF-8 files instead of corrupt
   assert.ok(!b.files.some((f) => f.path === 'latin1.txt'))
   assert.deepEqual(b.skipped, [{ path: 'latin1.txt', reason: 'not UTF-8 text' }])
   assert.throws(() => formatBundle({ task: 't', kind: 'input', files: [{ path: 'x.txt', data: Buffer.from([0xff]) }] }), /not UTF-8/)
+})
+
+// ------------------------------------------------- follow-up: lone CR, refusals, aliases
+test('restoreTextStyle: a uniformly lone-CR local file gets lone CR back; a mixed one is left alone', () => {
+  const lf = Buffer.from('a\nc\n')
+  assert.equal(restoreTextStyle(lf, Buffer.from('a\rb\r')).toString(), 'a\rc\r')
+  assert.equal(restoreTextStyle(lf, Buffer.from('﻿a\rb\r')).toString(), '﻿a\rc\r')
+  assert.equal(restoreTextStyle(lf, Buffer.from('a\r\nb\r\n')).toString(), 'a\r\nc\r\n')
+  // Mixed endings have no single style to restore, so the new text keeps its own.
+  for (const mixed of ['a\r\nb\n', 'a\rb\n', 'a\r\nb\r', 'a\r\nb\rc\n']) assert.equal(restoreTextStyle(lf, Buffer.from(mixed)).toString(), 'a\nc\n', JSON.stringify(mixed))
+  assert.equal(restoreTextStyle(lf, Buffer.from('no newline')).toString(), 'a\nc\n')
+})
+
+test('unpack-output.mjs: a lone-CR local file keeps lone CR when a Markdown or normalised ZIP entry replaces it', () => {
+  const repo = repoWith({ 'mac.txt': 'a\rb\r', 'zip.txt': 'a\rb\r' })
+  const md = join(repo, 'out.md')
+  writeFileSync(md, formatBundle({ task: 'demo-task', kind: 'output', files: [{ path: 'mac.txt', data: Buffer.from('a\nc\n') }, { path: '_m365/AUDIT.md', data: Buffer.from(AUDIT) }] }))
+  const r = unpack(repo, md)
+  assert.equal(r.status, 0, r.stderr)
+  assert.equal(readFileSync(join(repo, 'mac.txt'), 'utf8'), 'a\rc\r')
+  const z = unpack(repo, outZip(repo, { 'zip.txt': 'a\nc\n' }, { baseline: { 'zip.txt': 'a\nb\n' } }))
+  assert.equal(z.status, 0, z.stdout + z.stderr)
+  assert.deepEqual(JSON.parse(z.stdout).modified, ['zip.txt'])
+  assert.equal(readFileSync(join(repo, 'zip.txt'), 'utf8'), 'a\rc\r')
+})
+
+test('CLIs: an expected refusal prints "error: <message>" without a stack trace; M365_DEBUG=1 adds it', () => {
+  const repo = repoWith({ 'src/app.py': 'x = 1\n' })
+  const clash = outZip(repo, { x: 'file\n', 'x/y.txt': 'nested\n' })
+  const cases = [
+    ['unpack-output.mjs', [clash, '--repo', repo], /^error: bundle: x is delivered as a file but is also the directory of x\/y\.txt$/m],
+    ['unpack-output.mjs', [join(repo, 'missing.zip'), '--repo', repo], /^error: ENOENT: no such file or directory/m],
+    ['make-input.mjs', ['--task', join(repo, 'missing.md'), '--repo', repo], /^error: ENOENT: no such file or directory/m],
+    ['pack-skill.mjs', ['instructions', join(repo, 'missing.md')], /^error: ENOENT: no such file or directory/m],
+  ]
+  for (const [script, args, want] of cases) {
+    const r = spawnSync(process.execPath, [join(SCRIPTS, script), ...args], { encoding: 'utf8', cwd: repo, env: { ...process.env, M365_DEBUG: '' } })
+    assert.equal(r.status, 1, `${script}\n${r.stderr}`)
+    assert.match(r.stderr, want, script)
+    assert.doesNotMatch(r.stderr, /\n\s+at /, `${script}: no raw stack trace`)
+    const d = spawnSync(process.execPath, [join(SCRIPTS, script), ...args], { encoding: 'utf8', cwd: repo, env: { ...process.env, M365_DEBUG: '1' } })
+    assert.equal(d.status, 1, script)
+    assert.match(d.stderr, /\n\s+at /, `${script}: M365_DEBUG=1 shows the stack`)
+  }
+})
+
+test('path model: a case variant of the reserved _m365/ prefix is unsafe; isProtocolPath ignores case', () => {
+  for (const p of ['_M365/AUDIT.md', '_M365', '_M365/CONVENTIONS/x.md']) assert.match(unsafePathReason(p) ?? '', /_m365/, p)
+  for (const p of ['_m365/AUDIT.md', 'src/_M365/x.md', '_m3650/x.md', '_m365']) assert.equal(unsafePathReason(p), null, p)
+  assert.ok(isProtocolPath('_m365/TASK.md') && isProtocolPath('_M365/TASK.md') && isProtocolPath('_m365/x'))
+  assert.ok(!isProtocolPath('src/_m365/x') && !isProtocolPath('_m3650/x') && !isProtocolPath('_m365'))
+})
+
+test('unpack-output.mjs: case variants of _m365/ and .m365/ cannot alias the reserved locations', () => {
+  // _M365/... would land in the repository and, on a case-insensitive file system, in _m365/.
+  const repo = repoWith({ 'src/app.py': 'x = 1\n' })
+  const r = unpack(repo, outZip(repo, { 'src/app.py': 'x = 2\n', '_M365/AUDIT.md': AUDIT }))
+  assert.equal(r.status, 1, r.stdout)
+  assert.match(r.stderr, /^error: unsafe path "_M365\/AUDIT\.md": .*_m365/m)
+  assert.deepEqual(readdirSync(repo).sort(), ['src'])
+  // .M365/<other task>/... is excluded like .m365/, as a file and as a deletion.
+  for (const [files, deletes] of [[{ '.M365/other-task/x.md': 'x\n' }, []], [{}, ['.M365/Other/notes.md']]]) {
+    const target = repoWith({ '.M365/Other/notes.md': 'n\n' })
+    const u = unpack(target, outZip(target, files, { deletes }))
+    assert.equal(u.status, 1, JSON.stringify(files))
+    assert.match(u.stderr, /--allow-excluded/)
+  }
+})
+
+test('unpack-output.mjs: reports go to the existing .m365/<slug> spelling when the bundle task differs in case', () => {
+  const repo = repoWith({ '.m365/demo-task/reports/ROUNDS.md': 'old\n' })
+  const zip = outZip(repo, { '_m365/TASK.md': TASK.replace('demo-task', 'Demo-Task') })
+  const r = unpack(repo, zip)
+  assert.equal(r.status, 0, r.stderr)
+  const j = JSON.parse(r.stdout)
+  assert.equal(j.task, 'Demo-Task')
+  for (const p of j.reports) assert.ok(p.startsWith(join(repo, '.m365', 'demo-task', 'reports')), p)
+  assert.deepEqual(readdirSync(join(repo, '.m365')), ['demo-task'])
+})
+
+test('make-input.mjs: a repository path under a case variant of _m365/ or .m365/ is not bundled', () => {
+  const repo = repoWith({ 'ok.txt': 'ok\n', '_M365/AUDIT.md': 'fake\n', '.M365/other/x.md': 'x\n', '.m365/TASK.md': TASK })
+  const r = run('make-input.mjs', ['--task', '.m365/TASK.md', '--repo', repo, '--format', 'md', '--quiet'], repo)
+  assert.equal(r.status, 0, r.stderr)
+  const b = parseBundle(readFileSync(r.stdout.trim(), 'utf8'))
+  assert.deepEqual(b.files.map((f) => f.path).sort(), ['_m365/TASK.md', 'ok.txt'])
+  assert.ok(b.skipped.some((s) => s.path === '_M365/AUDIT.md'), JSON.stringify(b.skipped))
 })

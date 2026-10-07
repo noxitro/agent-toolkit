@@ -3,7 +3,7 @@
 // Python's zipfile so that these tests do not depend on the local Node bundle code.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -134,6 +134,23 @@ test('bundle_io unpack: a file/directory clash (a and a/b) aborts before anythin
   assert.equal(r.status, 1, `${r.stdout}${r.stderr}`)
   assert.match(r.stderr, /exists in .* and is not a directory/)
   assert.deepEqual(readdirSync(work), ['a'], 'nothing else written')
+})
+
+test('bundle_io: a deleted file that becomes a directory (docs -> docs/index.md) round-trips', (t) => {
+  if (!PY) return t.skip('no python interpreter on PATH')
+  const { tmp, work } = workdir('m365fix-file2dir-', { docs: 'was a file\n', 'src/a.py': 'x = 1\n' })
+  rmSync(join(work, 'docs'))
+  mkdirSync(join(work, 'docs'))
+  writeFileSync(join(work, 'docs/index.md'), '# now a directory\n')
+  for (const ext of ['zip', 'md']) {
+    const out = join(tmp, `out.${ext}`)
+    ok(py([BUNDLE_IO, 'pack', work, out]), `pack ${ext}`)
+    // The deletion is only recorded, so it does not clash with the delivered docs/index.md.
+    const audit = join(tmp, `audit-${ext}`)
+    ok(py([BUNDLE_IO, 'unpack', out, audit]), `unpack ${ext}`)
+    assert.equal(readFileSync(join(audit, 'docs/index.md'), 'utf8'), '# now a directory\n')
+    assert.match(readFileSync(join(audit, '_m365/DELETED.txt'), 'utf8'), /^docs$/m)
+  }
 })
 
 test('cache directories (.pytest_cache, node_modules, ...) are never walked, hashed or packed', (t) => {
@@ -300,5 +317,72 @@ test('audit_checks forbidden: the whole changed file is checked, as the docs say
   const docs = ['references/loop-protocol.md', 'm365/skills/audit/SKILL.template.md', 'm365/skills/implement/SKILL.template.md']
   for (const d of docs) {
     assert.match(readFileSync(join(ROOT, 'shared/skills/m365-skill-pack', d), 'utf8'), /lines\s+that\s+were\s+(already\s+)?there\s+before/, d)
+  }
+})
+
+test('bundle_io unpack: delivered paths that fold together (case, NFC) are refused, as unpack-output.mjs does', (t) => {
+  if (!PY) return t.skip('no python interpreter on PATH')
+  const tmp = mkdtempSync(join(tmpdir(), 'm365fix-fold-'))
+  const nfc = 'café.md'
+  const nfd = 'café.md'
+  const cases = [
+    [zipBundle(join(tmp, 'case.zip'), { 'a.md': '1\n', 'A.md': '2\n', '_m365/TASK.md': TASK }), /a\.md and A\.md differ only in letter case or Unicode normalisation/],
+    [zipBundle(join(tmp, 'nfc.zip'), { [nfc]: '1\n', [nfd]: '2\n' }), /differ only in letter case or Unicode normalisation/],
+    [join(tmp, 'dir.md'), /Docs is delivered as a file but is also the directory of docs\/x\.md/],
+  ]
+  writeFileSync(cases[2][0], mdBundle({ Docs: 'file\n', 'docs/x.md': 'nested\n' }))
+  for (const [bundle, want] of cases) {
+    const work = join(tmp, 'work')
+    const r = py([BUNDLE_IO, 'unpack', bundle, work])
+    assert.equal(r.status, 1, `${bundle}\n${r.stdout}${r.stderr}`)
+    assert.match(r.stderr, want)
+    assert.ok(!existsSync(work), 'nothing written')
+  }
+  // A deletion that folds to a delivered path is a case-only rename, not a collision.
+  const rename = zipBundle(join(tmp, 'rename.zip'), { 'README.md': 'new\n', '_m365/DELETED.txt': 'Readme.md\n', '_m365/TASK.md': TASK })
+  ok(py([BUNDLE_IO, 'unpack', rename, join(tmp, 'renamed')]), 'case-only rename')
+})
+
+test('bundle_io pack: names that fold together are refused before any bundle is written', (t) => {
+  if (!PY) return t.skip('no python interpreter on PATH')
+  const { tmp, work } = workdir('m365fix-foldpack-', { 'src/a.py': 'x = 1\n', 'Readme.md': 'r\n' })
+  writeFileSync(join(work, 'src/A.py'), 'x = 2\n')
+  for (const out of ['out.zip', 'out.md']) {
+    const r = py([BUNDLE_IO, 'pack', work, join(tmp, out), '--full'])
+    assert.equal(r.status, 1, `${out}\n${r.stdout}${r.stderr}`)
+    assert.match(r.stderr, /src\/A\.py and src\/a\.py differ only in letter case/)
+    assert.ok(!existsSync(join(tmp, out)), `${out} not written`)
+  }
+  // A case-only rename (old spelling deleted) packs fine.
+  const { tmp: tmp2, work: work2 } = workdir('m365fix-foldren-', { 'Readme.md': 'r\n' })
+  writeFileSync(join(work2, 'README.md'), 'r\n')
+  ok(py(['-I', '-c', 'import os,sys; os.remove(sys.argv[1])', join(work2, 'Readme.md')]), 'remove')
+  ok(py([BUNDLE_IO, 'pack', work2, join(tmp2, 'out.zip')]), 'pack a case-only rename')
+})
+
+test('bundle_io: a case variant of the reserved _m365/ prefix is refused on unpack and pack', (t) => {
+  if (!PY) return t.skip('no python interpreter on PATH')
+  const tmp = mkdtempSync(join(tmpdir(), 'm365fix-alias-'))
+  for (const files of [{ 'ok.txt': 'ok\n', '_M365/AUDIT.md': '# AUDIT\n' }, { 'ok.txt': 'ok\n', '_M365': 'x\n' }]) {
+    const work = join(tmp, 'work')
+    const r = py([BUNDLE_IO, 'unpack', zipBundle(join(tmp, 'a.zip'), files), work])
+    assert.equal(r.status, 1, `${r.stdout}${r.stderr}`)
+    assert.match(r.stderr, /unsafe path "_M365.*_m365/)
+    assert.ok(!existsSync(work))
+  }
+  const md = join(tmp, 'del.md')
+  writeFileSync(md, mdBundle({ 'ok.txt': 'ok\n' }, { kind: 'output', extra: ['### DELETE _M365/manifest.json', ''] }))
+  const del = py([BUNDLE_IO, 'unpack', md, join(tmp, 'work')])
+  assert.equal(del.status, 1, `${del.stdout}${del.stderr}`)
+  assert.match(del.stderr, /_M365\/manifest\.json/)
+  // A sandbox that grew _M365/ beside _m365/ cannot pack it into a bundle the local side would refuse.
+  const { tmp: t2, work } = workdir('m365fix-aliaspack-', { 'src/a.py': 'x = 1\n' })
+  mkdirSync(join(work, '_M365'))
+  writeFileSync(join(work, '_M365/AUDIT.md'), '# AUDIT\n')
+  for (const out of ['out.zip', 'out.md']) {
+    const r = py([BUNDLE_IO, 'pack', work, join(t2, out)])
+    assert.equal(r.status, 1, `${out}\n${r.stdout}${r.stderr}`)
+    assert.match(r.stderr, /_M365\/AUDIT\.md/)
+    assert.ok(!existsSync(join(t2, out)), `${out} not written`)
   }
 })

@@ -13,10 +13,12 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { parseArgs, usage } from './lib/args.mjs'
-import { PROTOCOL_PREFIX, assertSafePath, isBinary, isGitSegment, isProtocolPath, isSafeSlug, normaliseText, parseAuditSummary, parseBundle, restoreTextStyle } from './lib/bundle.mjs'
+import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
+import { PROTOCOL_PREFIX, assertSafePath, foldPath, isBinary, isGitSegment, isProtocolPath, isSafeSlug, normaliseText, parseAuditSummary, parseBundle, restoreTextStyle } from './lib/bundle.mjs'
 import { INPUT_EXCLUDE_RES } from './lib/m365-rules.mjs'
 import { readZip } from './lib/unzip.mjs'
+
+installErrorHandler()
 
 const HELP = `
 Usage: node unpack-output.mjs <out.zip|out.md> [options]
@@ -34,6 +36,7 @@ files the sandbox left untouched keep their local copy, and a file changed on bo
 sides is reported as a conflict and left alone unless --force is given. A bundle
 without _m365/manifest.json is applied as a plain overwrite.
 Exit: 3 conflicts (takes precedence), 0 PASS, 2 FAIL, 1 error or no usable AUDIT.md.
+Environment: M365_DEBUG=1 - print the stack trace with an error.
 `
 
 let args
@@ -117,11 +120,6 @@ if (task && !isSafeSlug(task)) {
 }
 task = task ?? 'unknown'
 
-/** Case- and normalisation-insensitive key, as the default macOS and Windows file systems compare names. */
-function foldPath(p) {
-  return p.normalize('NFC').toLowerCase()
-}
-
 /** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
 function escapes(rel) {
   return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
@@ -172,7 +170,24 @@ function realInside(base, abs) {
 }
 const insideRepo = (abs) => realInside(repo, abs)
 
-const reportsDir = resolve(opts.reports ?? join(repo, '.m365', task, 'reports'))
+/**
+ * The name as already spelled in dir when exactly one entry folds to it: on a
+ * case-insensitive file system .m365/Demo-Task is the existing .m365/demo-task anyway, so
+ * reports land there on every platform and the printed paths say where they went.
+ */
+function existingSpelling(dir, name) {
+  let entries
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return name
+  }
+  if (entries.includes(name)) return name
+  const same = entries.filter((e) => foldPath(e) === foldPath(name))
+  return same.length === 1 ? same[0] : name
+}
+
+const reportsDir = resolve(opts.reports ?? join(repo, '.m365', existingSpelling(join(repo, '.m365'), task), 'reports'))
 if (!opts.reports && !insideDir(join(repo, '.m365'), reportsDir)) throw new Error(`refusing to write reports outside ${join(repo, '.m365')}: ${reportsDir}`)
 
 // ----------------------------------------------------------------- apply

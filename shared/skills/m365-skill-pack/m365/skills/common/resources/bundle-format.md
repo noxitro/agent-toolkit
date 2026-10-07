@@ -8,8 +8,11 @@ writes both encodings; you normally never build one by hand.
 Relative to the repository root, `/` separated, no `..`, no leading `/`, no drive
 letter, no `.git` segment, no segment ending in a space plus `[...]` (`notes [draft]`), no Windows device name
 (`nul.txt`, `COM1`) or 8.3 short-name pattern (`PROGRA~1`) as a segment,
-and no path that is also the directory of another (`a` and `a/b`). `_m365/` is reserved
-for protocol files:
+no path that is also the directory of another (`a` and `a/b`), and no two paths that
+differ only in letter case or Unicode normalisation (`README.md` and `Readme.md`, or
+`Docs` and `docs/x.md`): the local side checks out on file systems that ignore both, so
+`unpack` and `pack` refuse them. `_m365/` is reserved for protocol files, in exactly that
+letter case (`_M365/` is refused):
 
 | Path | Meaning |
 | --- | --- |

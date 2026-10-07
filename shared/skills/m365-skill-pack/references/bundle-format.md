@@ -26,12 +26,16 @@ Three implementations must agree with this document: `scripts/lib/bundle.mjs` an
   `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, any letter case, with or without an
   extension: `nul.txt`) and any segment holding an 8.3 short-name pattern `~<digit>`
   (`PROGRA~1`, `foo~2.txt`), since either can alias another file on Windows.
-- `unpack-output.mjs` compares names case-folded and in Unicode NFC, as the default
-  macOS and Windows file systems do, on every platform: two delivered paths that fold
-  together are refused, and a deletion that folds to a delivered path (`Readme.md`
-  deleted, `README.md` delivered) is applied as a rename, judged by the old spelling.
+- Both sides compare names case-folded and in Unicode NFC (lower case of the NFC form),
+  as the default macOS and Windows file systems do, on every platform: two delivered
+  paths that fold together, or a file that folds to the directory of another (`Docs` and
+  `docs/x.md`), are refused (`bundle_io.py` refuses them on unpack and before it packs).
+  A deletion that folds to a delivered path (`Readme.md` deleted, `README.md` delivered)
+  is not a collision: `unpack-output.mjs` applies it as a rename, judged by the old spelling.
 - The prefix `_m365/` is reserved for protocol files and is never written into the
-  repository. Known members:
+  repository. A first segment that is `_m365` in another letter case (`_M365/AUDIT.md`)
+  is refused on both sides, since it would slip past the reserved-prefix checks and still
+  alias `_m365/` on a case-insensitive file system. Known members:
 
 | Path | Written by | Purpose |
 | --- | --- | --- |
@@ -106,10 +110,12 @@ Rules:
 - Content is UTF-8 without BOM, LF only. The packer drops a BOM and converts CRLF and
   lone CR to LF; a file that is not valid UTF-8 is listed under `## Skipped` as
   `not UTF-8 text` instead of being carried with replacement characters. The unpacker
-  keeps the BOM and CRLF style of an existing target file and writes LF for new files.
+  keeps the BOM and the line-ending style of an existing target file (CRLF or lone CR,
+  when every line break in it has that one style; a file with mixed endings gets the
+  new text as delivered) and writes LF for new files.
   The sandbox hashes the normalised text, so `unpack-output.mjs` also matches a local
   file against its baseline after this normalisation, and restores that file's BOM and
-  CRLF when it writes a ZIP entry over it as well.
+  line endings when it writes a ZIP entry over it as well.
 - Binary files (NUL byte in the first 8 KiB, or a known binary extension) are listed
   under `## Skipped` with the reason, so the model knows they exist.
 - `### DELETE <path>` removes the file on unpack; a protocol (`_m365/`) path cannot be

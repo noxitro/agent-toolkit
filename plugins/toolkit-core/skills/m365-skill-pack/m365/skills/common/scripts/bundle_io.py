@@ -10,8 +10,10 @@ Usage:
         files (_m365/...) to <workdir>/_m365/. Writes <workdir>/_m365/manifest.json with
         the sha256 of every repository file (except under SKIP_DIRS, which are never
         walked) so that later changes can be detected. An unsafe path anywhere in the
-        bundle, or a path that is both a file and a directory (a and a/b, also against
-        the existing workdir), aborts before anything is written.
+        bundle, a path that is both a file and a directory (a and a/b, also against
+        the existing workdir), or two delivered paths that differ only in letter case or
+        Unicode normalisation (as unpack-output.mjs refuses them), aborts before anything
+        is written.
         --kind output (auto-detected for output bundles): the auditor's view. A bundle
         from `pack --full` carries the input manifest, which is kept so that `status`
         shows the real changes; a bundle without one gets an empty manifest and every
@@ -32,7 +34,9 @@ Usage:
         files, the deletions, and every _m365/ file except manifest.json and state.json.
         --full (what the agent instructions use) holds every repository file plus the
         input manifest.json, so an independent auditor can tell real changes from
-        untouched files. --kind audit packs only _m365/AUDIT.md.
+        untouched files. --kind audit packs only _m365/AUDIT.md. Paths that the local
+        unpacker would refuse (unsafe, or folding together by case or Unicode
+        normalisation) abort the pack before the bundle is written.
 
 Exit codes: 0 success, 1 error (message on stderr).
 """
@@ -46,6 +50,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import zipfile
 import zlib
 
@@ -109,7 +114,12 @@ def unsafe_path_reason(p):
         return "drive letter in path"
     if "\0" in p:
         return "NUL in path"
-    for seg in p.split("/"):
+    segs = p.split("/")
+    # _M365/... would bypass every exact-case protocol check, and on a case-insensitive
+    # file system it is the same directory as _m365/.
+    if segs[0] != PROTOCOL_DIR and segs[0].lower() == PROTOCOL_DIR:
+        return "case variant of the reserved _m365/ prefix"
+    for seg in segs:
         if seg == "":
             return "empty segment"
         if seg in (".", ".."):
@@ -157,7 +167,14 @@ def assert_safe_path(p):
 
 
 def is_protocol_path(p):
-    return p.startswith(PROTOCOL_PREFIX)
+    """Under the reserved _m365/ prefix, in any letter case (unsafe_path_reason refuses the variants)."""
+    return p[:len(PROTOCOL_PREFIX)].lower() == PROTOCOL_PREFIX
+
+
+def fold_path(p):
+    """Case- and normalisation-insensitive key, as foldPath in scripts/lib/bundle.mjs
+    (NFC, then lower case): how the default macOS and Windows file systems compare names."""
+    return unicodedata.normalize("NFC", p).lower()
 
 
 def in_skip_dir(p):
@@ -174,6 +191,24 @@ def assert_no_file_dir_clash(paths):
             prefix = "/".join(parts[:k])
             if prefix in files:
                 raise BundleError("%s is both a file and the directory of %s" % (prefix, p))
+
+
+def assert_no_fold_collision(paths, hint=""):
+    """Refuse delivered paths that fold to one name, or a file that folds to the directory
+    of another (Docs and docs/x.md): the local unpacker refuses such a bundle whole.
+    Deletions are not passed in, since one that folds to a delivered path is a rename."""
+    by_fold = {}
+    for p in paths:
+        k = fold_path(p)
+        if k in by_fold:
+            raise BundleError("%s and %s differ only in letter case or Unicode normalisation%s" % (by_fold[k], p, hint))
+        by_fold[k] = p
+    for p in paths:
+        segs = fold_path(p).split("/")
+        for k in range(1, len(segs)):
+            prefix = "/".join(segs[:k])
+            if prefix in by_fold:
+                raise BundleError("%s is delivered as a file but is also the directory of %s%s" % (by_fold[prefix], p, hint))
 
 
 def parse_manifest_bytes(data):
@@ -527,7 +562,10 @@ def read_bundle(bundle_path):
             if d in seen_del:
                 raise BundleError("%s is listed for deletion twice" % d)
             seen_del.add(d)
-        assert_no_file_dir_clash(list(file_paths) + deletes)
+        # Deletions are only recorded, never written, so a deleted file may become a
+        # directory (docs -> docs/index.md); only delivered paths can clash.
+        assert_no_file_dir_clash(list(file_paths))
+        assert_no_fold_collision([p for p, _ in files])
         return {"encoding": "zip", "header": {}, "files": files, "deletes": deletes,
                 "skipped": [], "detected_kind": "output" if is_output else "input"}
     try:
@@ -542,7 +580,8 @@ def read_bundle(bundle_path):
     for d in b["deletes"]:
         if is_protocol_path(d):
             raise BundleError("bundle deletes a protocol path: %s" % d)
-    assert_no_file_dir_clash([p for p, _ in b["files"]] + b["deletes"])
+    assert_no_file_dir_clash([p for p, _ in b["files"]])
+    assert_no_fold_collision([p for p, _ in b["files"]])
     kind = b["header"].get("kind")
     if kind is None:
         carried = any(p == MANIFEST_PATH and parse_manifest_bytes(d) is not None for p, d in b["files"])
@@ -581,7 +620,7 @@ def cmd_unpack(args):
     targets = [p for p, _ in repo_files] + [p for p, _ in proto_files] + [MANIFEST_PATH]
     if bundle["encoding"] == "markdown" and bundle["deletes"]:
         targets.append(DELETED_PATH)
-    assert_no_file_dir_clash(targets + bundle["deletes"])
+    assert_no_file_dir_clash(targets)
     for path in targets:
         parts = path.split("/")
         for k in range(1, len(parts)):
@@ -721,6 +760,13 @@ def cmd_pack(args):
         paths = repo + proto
         if AUDIT_PATH not in proto:
             sys.stderr.write("warning: no %s; the local unpacker will report no verdict\n" % AUDIT_PATH)
+
+    # Everything the local unpacker would refuse stops the pack here, before the output
+    # file is opened, so that a refusal never leaves half a ZIP behind.
+    for p in paths + deletes:
+        assert_safe_path(p)
+    assert_no_fold_collision(paths + ([DELETED_PATH] if deletes and encoding == "zip" else []),
+                             hint="; rename or remove one of them before packing")
 
     packed = []
     skipped = []

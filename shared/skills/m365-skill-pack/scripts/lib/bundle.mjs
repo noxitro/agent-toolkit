@@ -15,6 +15,9 @@ export function unsafePathReason(p) {
   if (/^[A-Za-z]:/.test(p)) return 'drive letter in path'
   if (p.includes('\0')) return 'NUL in path'
   const segs = p.split('/')
+  // `_M365/...` would bypass every exact-case protocol check, and on a case-insensitive
+  // file system it is the same directory as `_m365/`.
+  if (segs[0] !== '_m365' && segs[0].toLowerCase() === '_m365') return 'case variant of the reserved _m365/ prefix'
   for (const s of segs) {
     if (s === '' ) return 'empty segment'
     if (s === '.' || s === '..') return `"${s}" segment`
@@ -50,8 +53,14 @@ export function assertSafePath(p) {
   return p
 }
 
+/** Under the reserved `_m365/` prefix, in any letter case (unsafePathReason refuses the variants). */
 export function isProtocolPath(p) {
-  return p.startsWith(PROTOCOL_PREFIX)
+  return p.slice(0, PROTOCOL_PREFIX.length).toLowerCase() === PROTOCOL_PREFIX
+}
+
+/** Case- and normalisation-insensitive key, as the default macOS and Windows file systems compare names. */
+export function foldPath(p) {
+  return p.normalize('NFC').toLowerCase()
 }
 
 /** Task slugs name directories under .m365/, so they follow the same rule as make-input. */
@@ -90,9 +99,11 @@ export function normaliseText(data) {
 }
 
 /**
- * Give new text bytes the BOM and CRLF style of the local file they replace, so a file
- * that differs from the snapshot only by that normalisation keeps its style. Bytes that
- * are not UTF-8 text are returned unchanged.
+ * Give new text bytes the BOM and line-ending style (CRLF or lone CR) of the local file
+ * they replace, so a file that differs from the snapshot only by that normalisation keeps
+ * its style. Line endings are restored only when every break in the local file had the
+ * same style: a mixed file has no single style to restore, so the new text keeps its own.
+ * Bytes that are not UTF-8 text are returned unchanged.
  */
 export function restoreTextStyle(data, local) {
   const text = decodeUtf8(data)
@@ -100,7 +111,8 @@ export function restoreTextStyle(data, local) {
   if (text === null || localText === null) return data
   let out = text
   if (localText.startsWith('\uFEFF') && !out.startsWith('\uFEFF')) out = `\uFEFF${out}`
-  if (localText.includes('\r\n')) out = out.replace(/\r?\n/g, '\r\n')
+  const styles = new Set(localText.match(/\r\n|\r|\n/g) ?? [])
+  if (styles.size === 1 && !styles.has('\n')) out = out.replace(/\r?\n/g, [...styles][0])
   return out === text ? data : Buffer.from(out, 'utf8')
 }
 

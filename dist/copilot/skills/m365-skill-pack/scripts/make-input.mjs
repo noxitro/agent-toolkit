@@ -13,11 +13,13 @@
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { parseArgs, usage } from './lib/args.mjs'
+import { installErrorHandler, parseArgs, usage } from './lib/args.mjs'
 import { decodeUtf8, formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
 import { CONVENTION_FILES, INPUT_EXCLUDE_RES, globToRegExp } from './lib/m365-rules.mjs'
 import { MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES } from './lib/unzip.mjs'
 import { writeZip } from './lib/zip.mjs'
+
+installErrorHandler()
 
 const HELP = `
 Usage: node make-input.mjs --task <TASK.md> [options] [<path>...]
@@ -39,6 +41,7 @@ A ZIP over the reader limits (${MAX_ENTRIES} entries, ${MAX_ENTRY_BYTES} bytes p
 ${MAX_TOTAL_BYTES} bytes in total) is refused, since the unpacker would refuse it too.
 
 Environment: M365_DROP_DIR - if set, the bundle is also copied there (e.g. a synced OneDrive folder).
+             M365_DEBUG=1 - print the stack trace with an error.
 `
 
 let args
