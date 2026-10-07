@@ -11,8 +11,8 @@
 // default exclusions in lib/m365-rules.mjs, and written straight to disk.
 
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join, relative, resolve, sep } from 'node:path'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parseArgs, usage } from './lib/args.mjs'
 import { formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
 import { CONVENTION_FILES, INPUT_EXCLUDE_RES, globToRegExp } from './lib/m365-rules.mjs'
@@ -95,6 +95,22 @@ if (positionals.length) {
   candidates = candidates.filter((p) => wanted.some((w) => p === w || p.startsWith(`${w}/`)))
 }
 
+const realRepo = realpathSync.native(repo)
+const dirCache = new Map()
+function dirInsideRepo(dir) {
+  if (dirCache.has(dir)) return dirCache.get(dir)
+  let ok = false
+  try {
+    const real = realpathSync.native(dir)
+    const rel = relative(realRepo, real)
+    ok = rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+  } catch {
+    ok = false
+  }
+  dirCache.set(dir, ok)
+  return ok
+}
+
 const files = []
 const skipped = []
 let total = 0
@@ -111,11 +127,21 @@ for (const rel of candidates.sort()) {
   const abs = join(repo, rel)
   let st
   try {
-    st = statSync(abs)
+    st = lstatSync(abs) // lstat: a tracked symlink must not smuggle its target's contents in
   } catch {
     continue
   }
+  if (st.isSymbolicLink()) {
+    skipped.push({ path: rel, reason: 'symbolic link' })
+    continue
+  }
   if (!st.isFile()) continue
+  // lstat only covers the last component; a symlinked or junctioned parent directory
+  // would still lead outside the repository, so the parent's real path is checked too.
+  if (!dirInsideRepo(dirname(abs))) {
+    skipped.push({ path: rel, reason: 'parent directory resolves outside the repository' })
+    continue
+  }
   const data = readFileSync(abs)
   if (format === 'md' && isBinary(data, rel)) {
     skipped.push({ path: rel, reason: 'binary' })
@@ -130,7 +156,17 @@ for (const rel of candidates.sort()) {
 files.push({ path: '_m365/TASK.md', data: Buffer.from(taskText.replace(/\r\n/g, '\n'), 'utf8') })
 for (const conv of CONVENTION_FILES) {
   const abs = join(repo, conv)
-  if (existsSync(abs)) files.push({ path: `_m365/CONVENTIONS/${basename(conv)}`, data: readFileSync(abs) })
+  let st
+  try {
+    st = lstatSync(abs)
+  } catch {
+    continue
+  }
+  if (st.isSymbolicLink()) {
+    skipped.push({ path: conv, reason: 'symbolic link (conventions file)' })
+    continue
+  }
+  if (st.isFile()) files.push({ path: `_m365/CONVENTIONS/${basename(conv)}`, data: readFileSync(abs) })
 }
 
 if (total > maxTotal) console.warn(`warning: bundle holds ${total} bytes of repository files (over --max-total ${maxTotal}); consider restricting paths`)

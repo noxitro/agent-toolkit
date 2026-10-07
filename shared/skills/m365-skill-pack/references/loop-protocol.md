@@ -123,8 +123,9 @@ Check ids `syntax`, `json`, `scope`, `forbidden` and `files` come from
 `audit_checks.py`; `AC-n` come from the model's judgement against `_m365/TASK.md`.
 `status` is `PASS` or `FAIL`; `detail` is required on FAIL.
 
-`unpack-output.mjs` parses only the JSON block and exits 0 on PASS, 2 on FAIL, 1 when
-the block is missing or malformed.
+`unpack-output.mjs` parses only the JSON block and exits 3 when files changed both
+locally and in the sandbox were left unwritten (see `--force`; this outranks the
+verdict), otherwise 0 on PASS, 2 on FAIL, 1 when the block is missing or malformed.
 
 ## `_m365/ROUNDS.md`
 

@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Use when an input bundle (a .zip or a Markdown file whose first line is "# m365-bundle v1") is attached and the task is to implement or fix code according to the _m365/TASK.md inside it. Unpacks the bundle, applies changes in a working directory, keeps a round log, and repacks only what changed into one output bundle.
+description: Use when an input bundle (a .zip or a Markdown file whose first line is "# m365-bundle v1") is attached and the task is to implement or fix code according to the _m365/TASK.md inside it. Unpacks the bundle, applies changes in a working directory, keeps a round log, and returns one output bundle holding the full working tree plus the input manifest that marks what changed.
 ---
 
 # implement

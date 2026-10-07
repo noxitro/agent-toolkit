@@ -20,10 +20,12 @@ Usage:
         comparing the working directory with the manifest.
 
     python3 bundle_io.py pack <workdir> <out.zip|out.md|out.txt>
-                         [--kind output|audit] [--round N] [--task SLUG] [--store]
-        Write an output bundle holding only added and modified repository files, the
-        deletions, and every _m365/ file except manifest.json and state.json.
-        --kind audit packs only _m365/AUDIT.md.
+                         [--kind output|audit] [--full] [--round N] [--task SLUG] [--store]
+        Write an output bundle. By default it holds only added and modified repository
+        files, the deletions, and every _m365/ file except manifest.json and state.json.
+        --full (what the agent instructions use) holds every repository file plus the
+        input manifest.json, so an independent auditor can tell real changes from
+        untouched files. --kind audit packs only _m365/AUDIT.md.
 
 Exit codes: 0 success, 1 error (message on stderr).
 """
@@ -246,6 +248,12 @@ def compute_status(workdir, manifest):
 
 
 # ------------------------------------------------------------------ ZIP codec
+# Bundles are repository subsets; anything near these caps is hostile or a mistake.
+ZIP_MAX_ENTRIES = 10000
+ZIP_MAX_ENTRY_BYTES = 64 * 1024 * 1024
+ZIP_MAX_TOTAL_BYTES = 256 * 1024 * 1024
+
+
 def read_zip(raw):
     """Return [(path, bytes)] for every file entry. Validates every name first."""
     try:
@@ -254,8 +262,12 @@ def read_zip(raw):
         raise BundleError("not a readable ZIP file: %s" % e)
     entries = []
     names = set()
+    total = 0
     with zf:
         infos = zf.infolist()
+        if len(infos) > ZIP_MAX_ENTRIES:
+            raise BundleError("zip has %d entries (limit %d)" % (len(infos), ZIP_MAX_ENTRIES))
+        # Pass 1: names, flags and declared sizes, before a single payload is read.
         for info in infos:
             # orig_filename is the name as stored; filename may have had "\" rewritten.
             name = info.orig_filename
@@ -267,14 +279,24 @@ def read_zip(raw):
             if name in names:
                 raise BundleError("zip contains %s twice" % name)
             names.add(name)
+            if info.file_size > ZIP_MAX_ENTRY_BYTES:
+                raise BundleError("zip entry %s declares %d bytes (limit %d)" % (name, info.file_size, ZIP_MAX_ENTRY_BYTES))
+            total += info.file_size
+            if total > ZIP_MAX_TOTAL_BYTES:
+                raise BundleError("zip entries declare more than %d bytes in total" % ZIP_MAX_TOTAL_BYTES)
+        # Pass 2: read, and hold every entry to its declared size.
         for info in infos:
             name = info.orig_filename
             if name.endswith("/"):
                 continue
             try:
-                entries.append((name, zf.read(info)))
+                with zf.open(info) as fh:
+                    data = fh.read(info.file_size + 1)
             except (zipfile.BadZipFile, NotImplementedError, RuntimeError, zlib.error) as e:
                 raise BundleError("cannot read zip entry %s: %s" % (name, e))
+            if len(data) != info.file_size:
+                raise BundleError("zip entry %s does not match its declared size" % name)
+            entries.append((name, data))
     return entries
 
 
