@@ -51,10 +51,18 @@ One paragraph. What must be true when the task is done.
   the audit. `*` and `?` do not cross `/`, `**` does (`src/**` is the whole subtree,
   `src/*.py` only the top level), a trailing `/` means the whole directory, and `[...]`
   character classes work. This is `audit_checks.py`'s own matcher, not Python's fnmatch.
+- List items may start with `-`, `*`, `+` or a number (`1.`, `1)`). An acceptance item is
+  `AC-n` followed by `:`, `-`, an en or em dash, or a space; the id may be bold
+  (`**AC-1**:`) or in backticks. A `Scope` or `Acceptance` section that has text but no
+  usable item makes `audit_checks.py` stop with an error instead of reading it as "no
+  restriction" or "nothing to judge".
 - Each `AC-n` must be checkable from the files alone: no network, no package
   installation, no external service. An acceptance criterion the auditor cannot verify
   from files is a bad criterion; rewrite it.
-- `Forbidden patterns` are regular expressions applied to changed text files.
+- `Forbidden patterns` are regular expressions applied to every line of each added or
+  modified text file. The manifest keeps only hashes, so lines that were already there
+  before the change are checked too: choose patterns the files in scope do not already
+  match.
 - `Max rounds` defaults to 3 when absent.
 
 ## Rounds
@@ -63,6 +71,8 @@ One paragraph. What must be true when the task is done.
 - Round 1 implements. Round N >= 2 fixes what the previous audit flagged.
 - After every round the agent runs the audit skill (deterministic checks via
   `audit_checks.py`, then one judgement per AC) and records the verdict.
+  `run_round.py finish --verdict PASS` is refused unless `_m365/AUDIT.md` records PASS
+  for that round; FAIL may be recorded without an audit.
 - The loop continues only while the verdict is FAIL and the round is below
   `Max rounds`. It stops on PASS or when the rounds are exhausted.
 - The output bundle is produced **once**, after the last round, with `pack --full` so it

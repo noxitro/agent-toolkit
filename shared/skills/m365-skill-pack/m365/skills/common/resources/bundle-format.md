@@ -6,7 +6,10 @@ writes both encodings; you normally never build one by hand.
 ## Paths
 
 Relative to the repository root, `/` separated, no `..`, no leading `/`, no drive
-letter, no `.git` segment. `_m365/` is reserved for protocol files:
+letter, no `.git` segment, no segment ending in a space plus `[...]` (`notes [draft]`), no Windows device name
+(`nul.txt`, `COM1`) or 8.3 short-name pattern (`PROGRA~1`) as a segment,
+and no path that is also the directory of another (`a` and `a/b`). `_m365/` is reserved
+for protocol files:
 
 | Path | Meaning |
 | --- | --- |
@@ -56,3 +59,6 @@ last line without newline
 
 The fence is one backtick longer than the longest backtick run inside the content, so
 the closing line never collides. `[noeol]` means the content has no trailing newline.
+Binary files cannot travel in this encoding: they are listed under `## Skipped`, and
+`unpack` leaves them out of a carried manifest so they do not show as deleted (nor as
+changed - use ZIP when they matter). A `### DELETE` of an `_m365/` path is refused.

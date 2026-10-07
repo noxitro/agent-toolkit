@@ -17,9 +17,19 @@ Three implementations must agree with this document: `scripts/lib/bundle.mjs` an
   with `./` or `/`.
 - Forbidden: a `..` segment, a drive letter (`C:`), a backslash, an empty segment, a
   segment that is `.git` in any letter case or one of its 8.3 short names (`GIT~1`),
-  a segment ending in a dot or space, and the characters `: < > " | ? *` or control
-  characters anywhere (the same family git's `core.protectNTFS` refuses). Duplicate
-  paths are also an error. An unpacker that meets one of these refuses the whole file.
+  a segment ending in a dot or space, a segment ending in a space plus `[...]`
+  (`notes [draft]`, which would read as Markdown header flags),
+  and the characters `: < > " | ? *` or control characters anywhere (the same family
+  git's `core.protectNTFS` refuses). Duplicate paths are also an error, as is a path that
+  is also the directory of another (`a` and `a/b`). An unpacker that meets one of these refuses the whole file.
+- Both sides (`bundle.mjs` and `bundle_io.py`) also refuse Windows device names as a segment (`CON`,
+  `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, any letter case, with or without an
+  extension: `nul.txt`) and any segment holding an 8.3 short-name pattern `~<digit>`
+  (`PROGRA~1`, `foo~2.txt`), since either can alias another file on Windows.
+- `unpack-output.mjs` compares names case-folded and in Unicode NFC, as the default
+  macOS and Windows file systems do, on every platform: two delivered paths that fold
+  together are refused, and a deletion that folds to a delivered path (`Readme.md`
+  deleted, `README.md` delivered) is applied as a rename, judged by the old spelling.
 - The prefix `_m365/` is reserved for protocol files and is never written into the
   repository. Known members:
 
@@ -27,7 +37,7 @@ Three implementations must agree with this document: `scripts/lib/bundle.mjs` an
 | --- | --- | --- |
 | `_m365/TASK.md` | local harness | the task contract (see `loop-protocol.md`) |
 | `_m365/CONVENTIONS/<file>` | `make-input.mjs` | copies of `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` when present |
-| `_m365/manifest.json` | `bundle_io.py unpack` | `{ "files": { "<path>": "<sha256>" } }` of the input, used to detect changes; carried into a `--full` output bundle |
+| `_m365/manifest.json` | `bundle_io.py unpack` | `{ "files": { "<path>": "<sha256>" } }` of the input, used to detect changes; carried into a `--full` output bundle, where it marks the bundle as output |
 | `_m365/DELETED.txt` | implement skill | paths removed during the task, one per line (ZIP encoding only) |
 | `_m365/state.json` | `run_round.py` | round counter and history (never packed) |
 | `_m365/checks.json` | `audit_checks.py check` | the last deterministic check results |
@@ -93,12 +103,19 @@ Rules:
   info string. N is one more than the longest run of backticks in the content, so the
   closing line (exactly N backticks) cannot collide with content. The parser matches
   the closing fence by exact length.
-- Content is UTF-8 without BOM, LF only. The packer converts CRLF to LF. The unpacker
-  keeps the line-ending style of an existing target file (CRLF stays CRLF) and writes LF
-  for new files.
+- Content is UTF-8 without BOM, LF only. The packer drops a BOM and converts CRLF and
+  lone CR to LF; a file that is not valid UTF-8 is listed under `## Skipped` as
+  `not UTF-8 text` instead of being carried with replacement characters. The unpacker
+  keeps the BOM and CRLF style of an existing target file and writes LF for new files.
+  The sandbox hashes the normalised text, so `unpack-output.mjs` also matches a local
+  file against its baseline after this normalisation, and restores that file's BOM and
+  CRLF when it writes a ZIP entry over it as well.
 - Binary files (NUL byte in the first 8 KiB, or a known binary extension) are listed
   under `## Skipped` with the reason, so the model knows they exist.
-- `### DELETE <path>` removes the file on unpack. `## Skipped` is informational.
+- `### DELETE <path>` removes the file on unpack; a protocol (`_m365/`) path cannot be
+  deleted. `## Skipped` is informational, except that `bundle_io.py unpack` leaves the
+  listed paths out of a carried manifest so that they do not read as deleted (their
+  changes cannot be seen; use ZIP when binary files matter to the audit).
 
 ## Size guidance
 
@@ -106,3 +123,7 @@ Rules:
 `--max-total` override). The 15 MB figure is the documented per-file attachment limit
 of Copilot Studio file input; the Agent Builder limit is not documented and is recorded
 under "Measured" in `m365-constraints.md` once known.
+
+The ZIP readers on both sides (`scripts/lib/unzip.mjs`, `bundle_io.py`) refuse more than
+10,000 entries, an entry over 64 MiB, or more than 256 MiB in total. Those limits are
+hard: `make-input.mjs` stops with an error instead of writing a ZIP over them.

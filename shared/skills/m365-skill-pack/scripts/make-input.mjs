@@ -14,8 +14,9 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { parseArgs, usage } from './lib/args.mjs'
-import { formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
+import { decodeUtf8, formatBundle, isBinary, isProtocolPath, unsafePathReason } from './lib/bundle.mjs'
 import { CONVENTION_FILES, INPUT_EXCLUDE_RES, globToRegExp } from './lib/m365-rules.mjs'
+import { MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES } from './lib/unzip.mjs'
 import { writeZip } from './lib/zip.mjs'
 
 const HELP = `
@@ -31,7 +32,11 @@ Usage: node make-input.mjs --task <TASK.md> [options] [<path>...]
   --max-total <bytes>  warn above this total (default 15000000)
   --store              zip without compression
   --quiet              print only the output path
-  <path>...            restrict to these files/directories (default: whole repository)
+  <path>...            restrict to these files/directories inside the repository
+                       (default: whole repository; "." is the whole repository too)
+
+A ZIP over the reader limits (${MAX_ENTRIES} entries, ${MAX_ENTRY_BYTES} bytes per file,
+${MAX_TOTAL_BYTES} bytes in total) is refused, since the unpacker would refuse it too.
 
 Environment: M365_DROP_DIR - if set, the bundle is also copied there (e.g. a synced OneDrive folder).
 `
@@ -66,6 +71,11 @@ function toPosix(p) {
   return p.split(sep).join('/')
 }
 
+/** A relative path that climbs out of its base (`..notes.md` is a name, not a climb). */
+function escapes(rel) {
+  return rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../') || isAbsolute(rel)
+}
+
 function gitFiles() {
   try {
     const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
@@ -91,8 +101,13 @@ const excludes = [...INPUT_EXCLUDE_RES, ...opts.exclude.map((g) => globToRegExp(
 candidates = candidates.filter((p) => !excludes.some((re) => re.test(p)))
 
 if (positionals.length) {
-  const wanted = positionals.map((p) => toPosix(relative(repo, resolve(repo, p))).replace(/\/+$/, ''))
-  candidates = candidates.filter((p) => wanted.some((w) => p === w || p.startsWith(`${w}/`)))
+  const wanted = positionals.map((p) => {
+    const rel = relative(repo, resolve(repo, p))
+    if (escapes(rel)) usage(`${p}: not inside the repository ${repo}`)
+    return toPosix(rel).replace(/\/+$/, '')
+  })
+  // '' is the repository root itself (`.`), which selects everything.
+  if (!wanted.includes('')) candidates = candidates.filter((p) => wanted.some((w) => p === w || p.startsWith(`${w}/`)))
 }
 
 const realRepo = realpathSync.native(repo)
@@ -103,7 +118,7 @@ function dirInsideRepo(dir) {
   try {
     const real = realpathSync.native(dir)
     const rel = relative(realRepo, real)
-    ok = rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+    ok = rel === '' || !escapes(rel)
   } catch {
     ok = false
   }
@@ -147,6 +162,11 @@ for (const rel of candidates.sort()) {
     skipped.push({ path: rel, reason: 'binary' })
     continue
   }
+  // A Markdown bundle carries text; invalid UTF-8 would turn into U+FFFD on the way.
+  if (format === 'md' && decodeUtf8(data) === null) {
+    skipped.push({ path: rel, reason: 'not UTF-8 text' })
+    continue
+  }
   if (st.size > maxFile) console.warn(`warning: ${rel} is ${st.size} bytes (over --max-file ${maxFile})`)
   files.push({ path: rel, data })
   total += st.size
@@ -166,10 +186,30 @@ for (const conv of CONVENTION_FILES) {
     skipped.push({ path: conv, reason: 'symbolic link (conventions file)' })
     continue
   }
-  if (st.isFile()) files.push({ path: `_m365/CONVENTIONS/${basename(conv)}`, data: readFileSync(abs) })
+  if (!st.isFile()) continue
+  const data = readFileSync(abs)
+  if (format === 'md' && decodeUtf8(data) === null) {
+    skipped.push({ path: conv, reason: 'not UTF-8 text (conventions file)' })
+    continue
+  }
+  files.push({ path: `_m365/CONVENTIONS/${basename(conv)}`, data })
 }
 
 if (total > maxTotal) console.warn(`warning: bundle holds ${total} bytes of repository files (over --max-total ${maxTotal}); consider restricting paths`)
+
+// The reader limits (unzip.mjs and bundle_io.py) are hard: a ZIP over them is refused on
+// the other side, so it is not written at all.
+if (format === 'zip') {
+  const over = []
+  if (files.length > MAX_ENTRIES) over.push(`${files.length} entries (limit ${MAX_ENTRIES})`)
+  for (const f of files) if (f.data.length > MAX_ENTRY_BYTES) over.push(`${f.path} is ${f.data.length} bytes (limit ${MAX_ENTRY_BYTES} per file)`)
+  const bytes = files.reduce((n, f) => n + f.data.length, 0)
+  if (bytes > MAX_TOTAL_BYTES) over.push(`${bytes} bytes in total (limit ${MAX_TOTAL_BYTES})`)
+  if (over.length) {
+    console.error(`error: the bundle exceeds the reader limits; restrict the paths or add --exclude:\n${over.map((o) => `  ${o}`).join('\n')}`)
+    process.exit(1)
+  }
+}
 
 // ------------------------------------------------------------------- output
 mkdirSync(outDir, { recursive: true })

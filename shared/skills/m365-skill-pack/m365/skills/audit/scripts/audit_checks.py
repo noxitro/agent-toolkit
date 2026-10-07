@@ -5,22 +5,33 @@ Usage:
     python3 audit_checks.py check <workdir> [--task TASK.md] [--out checks.json] [--allow-empty]
         Compare the working directory with _m365/manifest.json and run the
         deterministic checks against _m365/TASK.md:
-          syntax     every added/modified .py parses (ast); .sh/.bash start with "#!"
-          json       every added/modified .json parses
+          syntax     every added/modified .py compiles (compile(), so module-level
+                     "return" and the like count); .sh/.bash start with "#!"
+          json       every added/modified .json parses as strict JSON (no BOM, no
+                     NaN/Infinity); tsconfig*.json, jsconfig*.json, .vscode/*.json,
+                     devcontainer.json and *.jsonc may carry comments and trailing commas
           scope      every added/modified/deleted path matches a "## Scope" glob
           forbidden  no line of an added/modified text file matches a
-                     "## Forbidden patterns" regex
+                     "## Forbidden patterns" regex. The manifest holds only hashes, so
+                     the whole file is checked, lines that were already there included.
           files      counts; FAIL when nothing changed (unless --allow-empty)
         Prints the result as JSON and writes it to --out (default
         <workdir>/_m365/checks.json). Exit 0 even when a check fails; read the JSON.
 
     python3 audit_checks.py report <workdir> --round N --ac AC-1=PASS
-                                   --ac "AC-2=FAIL:detail" ... [--checks checks.json] [--notes TEXT]
-        Merge the deterministic checks (re-run when --checks is missing) with one
+                                   --ac "AC-2=FAIL:detail" ... [--checks checks.json]
+                                   [--allow-empty] [--notes TEXT]
+        Merge the deterministic checks (re-run when --checks is missing; pass
+        --allow-empty again for a task that changes nothing) with one
         judgement per acceptance criterion, then rewrite _m365/AUDIT.md: "# AUDIT", the
         m365-audit/1 JSON block (earlier rounds kept), and a "## Round N" section per
         round. Prints the JSON summary. Exit 2 when an AC is missing, unknown, or a
         FAIL has no detail.
+
+TASK.md lists: "-", "*", "+" and "1." / "1)" items all count. Acceptance items are
+"AC-n" followed by ":", "-", an en or em dash, or a space; the id may be bold or in
+backticks. A "## Scope" or "## Acceptance" section with text but no usable item is an
+error, never an unrestricted scope or an empty criteria list.
 
 Scope globs: "**" crosses "/", "*" and "?" do not, "**/" may match nothing, and a
 pattern ending in "/" covers everything below it. Python 3.8+, standard library only.
@@ -29,22 +40,28 @@ own and cannot import from another skill.
 """
 
 import argparse
-import ast
 import hashlib
 import json
 import os
 import re
 import sys
+import warnings
 
 CHECKS_SCHEMA = "m365-checks/1"
 AUDIT_SCHEMA = "m365-audit/1"
 PROTOCOL_DIR = "_m365"
-SKIP_DIRS = ("__pycache__", ".git")
+# Same list as JUNK_DIRS in scripts/lib/m365-rules.mjs.
+SKIP_DIRS = ("__pycache__", ".git", "node_modules", ".pytest_cache", ".mypy_cache")
 DEFAULT_MAX_ROUNDS = 3
 FORBIDDEN_CAP = 20
 TASK_RE = re.compile(r"^# TASK\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s*$", re.M)
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
-AC_RE = re.compile(r"^(AC-\d+)\s*:\s*(.*)$")
+# AC-1: text | **AC-1**: text | **AC-1:** text | `AC-1` - text | AC-1 text, and an
+# en or em dash (U+2013, U+2014) in place of "-".
+AC_SEP = "[:\\-\u2013\u2014]"
+AC_RE = re.compile(r"^(?:\*\*|__|`)?(AC-\d+)(?:\s*" + AC_SEP + r")?(?:\*\*|__|`)?(?:\s*" + AC_SEP + r"|\s|$)\s*(.*)$")
+# "- item", "* item", "+ item", "1. item", "1) item"; an optional "[ ]" / "[x]" checkbox.
+LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)$")
 AUDIT_JSON_RE = re.compile(r"```json\s*\n(.*?)\n```", re.S)
 ROUND_HEADING_RE = re.compile(r"^## Round (\d+)\s*$", re.M)
 
@@ -109,8 +126,8 @@ def is_binary(data, path):
 
 
 def walk_files(root):
-    """Relative '/' paths of repository files: skips _m365/ at the top and
-    __pycache__ / .git everywhere; symbolic links are ignored."""
+    """Relative '/' paths of repository files: skips _m365/ at the top and SKIP_DIRS
+    everywhere; symbolic links are ignored."""
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = os.path.relpath(dirpath, root)
@@ -183,21 +200,38 @@ def parse_task(text):
         items = []
         for line in sections.get(name, []):
             s = line.strip()
-            if s.startswith("- ") or s.startswith("* "):
-                items.append(s[2:].strip())
+            b = LIST_ITEM_RE.match(s)
+            if b:
+                items.append(b.group(1).strip())
             elif s and items and line[:1] in (" ", "\t"):
                 items[-1] = items[-1] + " " + s  # indented continuation line
         return items
 
+    def has_text(name):
+        return any(line.strip() and not re.match(r"^<!--.*-->$", line.strip()) for line in sections.get(name, []))
+
+    # "## Acceptance criteria" is as good as "## Acceptance".
+    acc_name = "acceptance" if "acceptance" in sections else "acceptance criteria"
     acceptance = []
-    for item in bullets("acceptance"):
+    for item in bullets(acc_name):
         a = AC_RE.match(item)
         if a:
             acceptance.append({"id": a.group(1), "text": a.group(2).strip()})
+    if not acceptance and has_text(acc_name):
+        # A criteria list nobody can read must not turn into "nothing to judge" (PASS).
+        raise AuditError('TASK.md "## Acceptance" has text but no criterion in the form "- AC-1: ..."; '
+                         "fix the task file")
     ids = [a["id"] for a in acceptance]
     dupes = sorted(set(i for i in ids if ids.count(i) > 1))
     if dupes:
         raise AuditError("TASK.md lists %s more than once" % ", ".join(dupes))
+
+    scope = None
+    if "scope" in sections:
+        scope = [strip_code(s) for s in bullets("scope")]
+        if not scope and has_text("scope"):
+            # Same reasoning: an unreadable scope must not become "no restriction".
+            raise AuditError('TASK.md "## Scope" has text but no list item such as "- src/**"; fix the task file')
 
     max_rounds = None
     for line in sections.get("max rounds", []):
@@ -209,7 +243,7 @@ def parse_task(text):
             break
     return {
         "slug": m.group(1) if m else None,
-        "scope": [strip_code(s) for s in bullets("scope")] if "scope" in sections else None,
+        "scope": scope,
         "forbidden": [strip_code(s) for s in bullets("forbidden patterns")],
         "acceptance": acceptance,
         "max_rounds": max_rounds,
@@ -270,6 +304,23 @@ def glob_to_regex(glob):
 
 
 # ------------------------------------------------------------------ checks
+def compile_error(data, rel):
+    """Why the source does not compile, or None. compile() rather than ast.parse(), so
+    that errors raised after parsing ("return" outside a function, "break" outside a
+    loop, "global" after assignment) count as well."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # SyntaxWarning noise, or an error under -W error
+            compile(data, rel, "exec", dont_inherit=True)
+    except SyntaxError as e:
+        return "%s:%s: %s" % (rel, e.lineno or 0, e.msg)
+    except ValueError as e:  # e.g. NUL bytes in the source on older interpreters
+        return "%s:0: %s" % (rel, e)
+    except (MemoryError, RecursionError) as e:  # e.g. a deeply nested expression
+        return "%s:0: too deeply nested to compile (%s)" % (rel, type(e).__name__)
+    return None
+
+
 def check_syntax(workdir, changed):
     failures = []
     count = 0
@@ -277,12 +328,9 @@ def check_syntax(workdir, changed):
         ext = ext_of(rel)
         if ext == ".py":
             count += 1
-            try:
-                ast.parse(read_bytes(native(workdir, rel)), filename=rel)
-            except SyntaxError as e:
-                failures.append("%s:%s: %s" % (rel, e.lineno or 0, e.msg))
-            except ValueError as e:  # e.g. NUL bytes in the source
-                failures.append("%s:0: %s" % (rel, e))
+            why = compile_error(read_bytes(native(workdir, rel)), rel)
+            if why:
+                failures.append(why)
         elif ext in (".sh", ".bash"):
             count += 1
             if not read_bytes(native(workdir, rel)).startswith(b"#!"):
@@ -294,17 +342,86 @@ def check_syntax(workdir, changed):
     return {"id": "syntax", "status": "PASS", "detail": "%d file(s) checked" % count}
 
 
+def is_jsonc(rel):
+    """Files whose tools accept comments and trailing commas (JSON with Comments)."""
+    base = rel[rel.rfind("/") + 1:].lower()
+    if ext_of(rel) == ".jsonc" or base == "devcontainer.json":
+        return True
+    if (base.startswith("tsconfig") or base.startswith("jsconfig")) and base.endswith(".json"):
+        return True
+    parent = rel.split("/")[-2:-1]
+    return bool(parent) and parent[0] == ".vscode" and base.endswith(".json")
+
+
+def strip_jsonc(text):
+    """Drop // and /* */ comments and trailing commas outside strings. Both become
+    spaces (newlines kept) so that error positions still point at the right line."""
+    out = []
+    comma = None  # index in out of a "," that only blanks and comments have followed
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            comma = None
+            i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                raise ValueError("unterminated /* comment")
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j + 2]))
+            i = j + 2
+        else:
+            if c in "]}" and comma is not None:
+                out[comma] = " "
+            if c == ",":
+                comma = len(out)
+            elif c not in " \t\r\n":
+                comma = None
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def reject_constant(name):
+    raise ValueError("%s is not valid JSON" % name)
+
+
+def json_error(data, rel):
+    """Why the file is not valid JSON, or None."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return "%s: starts with a UTF-8 byte order mark" % rel
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return "%s: not UTF-8 (%s)" % (rel, e)
+    try:
+        if is_jsonc(rel):
+            text = strip_jsonc(text)
+        json.loads(text, parse_constant=reject_constant)
+    except (ValueError, RecursionError) as e:
+        return "%s: %s" % (rel, e)
+    return None
+
+
 def check_json(workdir, changed):
     failures = []
     count = 0
     for rel in changed:
-        if ext_of(rel) != ".json":
+        if ext_of(rel) not in (".json", ".jsonc"):
             continue
         count += 1
-        try:
-            json.loads(read_text(native(workdir, rel)))
-        except ValueError as e:
-            failures.append("%s: %s" % (rel, e))
+        why = json_error(read_bytes(native(workdir, rel)), rel)
+        if why:
+            failures.append(why)
     if failures:
         return {"id": "json", "status": "FAIL", "detail": "; ".join(failures)}
     if count == 0:
@@ -333,6 +450,8 @@ def check_forbidden(workdir, task, changed):
         except re.error as e:
             invalid.append("invalid pattern %s: %s" % (pat, e))
     hits = []
+    # The manifest keeps hashes, not the original text, so a changed file is checked as
+    # a whole: a line that was already there before the change matches as well.
     for rel in changed:
         data = read_bytes(native(workdir, rel))
         if is_binary(data, rel):
@@ -518,7 +637,7 @@ def cmd_report(args):
         if not isinstance(checks, dict) or checks.get("schema") != CHECKS_SCHEMA:
             raise AuditError('%s is not an "%s" file' % (args.checks, CHECKS_SCHEMA))
     else:
-        checks = run_checks(workdir, args.task)
+        checks = run_checks(workdir, args.task, args.allow_empty)
         write_text(proto(workdir, "checks.json"), dump(checks) + "\n")
 
     round_checks = [entry(c["id"], c["status"], c.get("detail"), always_detail=(c["id"] == "files"))
@@ -575,8 +694,11 @@ def build_parser():
     p.add_argument("workdir")
     p.add_argument("--round", type=int, default=None)
     p.add_argument("--ac", action="append", default=[], metavar="AC-n=PASS|FAIL:detail")
-    p.add_argument("--checks", default=None, help="checks JSON (default <workdir>/_m365/checks.json)")
+    p.add_argument("--checks", default=None,
+                   help="checks JSON written by `check` (default: re-run the checks and rewrite <workdir>/_m365/checks.json)")
     p.add_argument("--task", default=None, help="TASK.md path (default <workdir>/_m365/TASK.md)")
+    p.add_argument("--allow-empty", action="store_true",
+                   help="files check passes when nothing changed (used when the checks are re-run)")
     p.add_argument("--notes", default="")
     p.set_defaults(func=cmd_report)
     return ap

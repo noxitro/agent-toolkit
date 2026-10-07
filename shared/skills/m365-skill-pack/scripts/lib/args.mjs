@@ -42,7 +42,8 @@ export function parseArgs(argv, spec) {
       val = argv[++i]
     }
     if (type === 'number') {
-      const n = Number(val)
+      // Number('') is 0, so a blank value (`--max-depth=`) is refused explicitly.
+      const n = val.trim() === '' ? NaN : Number(val)
       if (!Number.isFinite(n)) throw new Error(`--${key} must be a number`)
       opts[key] = n
     } else if (type === 'list') opts[key].push(val)

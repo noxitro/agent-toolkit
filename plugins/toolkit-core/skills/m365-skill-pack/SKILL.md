@@ -83,7 +83,11 @@ the "Measured" tables before relying on the sandbox for real work.
    started from: files the sandbox left untouched keep their local copy (`kept`), a
    file changed on both sides is a `conflict` and is not written (rerun with `--force`
    to take the sandbox version). A bundle without `_m365/manifest.json` is a plain
-   overwrite. `_m365/*` goes to `<repo>/.m365/<slug>/reports/`. Exit codes: 3 when
+   overwrite. A bundle that cannot be laid out (a file where it needs a directory, names
+   that differ only in case) is refused before anything is written; writes into paths the
+   input excludes by default (`node_modules/`, `.env`, `.venv/`, `.m365/`, keys) need
+   `--allow-excluded`, because `git status` may not show them. `_m365/*` goes to
+   `<repo>/.m365/<slug>/reports/`. Exit codes: 3 when
    conflicts were left unresolved (this outranks the verdict), otherwise 0 PASS, 2 FAIL,
    1 no usable `AUDIT.md`. Nothing
    is committed. Review with `git diff` and the report; on FAIL decide with the user

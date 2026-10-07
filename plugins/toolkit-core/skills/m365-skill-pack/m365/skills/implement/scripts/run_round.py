@@ -14,7 +14,9 @@ Usage:
     python3 run_round.py finish <workdir> --verdict PASS|FAIL [--notes TEXT]
         Record the verdict of the current round in state.json and as a "## Round N"
         section of _m365/ROUNDS.md (changed files, check results, notes). Exits 2 when
-        _m365/AUDIT.md already holds a different verdict for this round.
+        _m365/AUDIT.md already holds a different verdict for this round, and for
+        --verdict PASS unless AUDIT.md records PASS for this round (a PASS needs an
+        audit; FAIL may be recorded without one).
         Prints {"round": N, "verdict": V, "next": "continue"|"stop", "reason": "..."}.
 
     python3 run_round.py show <workdir>
@@ -37,7 +39,8 @@ import sys
 STATE_SCHEMA = "m365-state/1"
 DEFAULT_MAX_ROUNDS = 3
 PROTOCOL_DIR = "_m365"
-SKIP_DIRS = ("__pycache__", ".git")
+# Same list as JUNK_DIRS in scripts/lib/m365-rules.mjs.
+SKIP_DIRS = ("__pycache__", ".git", "node_modules", ".pytest_cache", ".mypy_cache")
 TASK_RE = re.compile(r"^# TASK\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s*$", re.M)
 ROUND_HEADING_RE = re.compile(r"^## Round (\d+)\s*$", re.M)
 AUDIT_JSON_RE = re.compile(r"```json\s*\n(.*?)\n```", re.S)
@@ -104,8 +107,8 @@ def parse_task(text):
 
 
 def walk_files(root):
-    """Relative '/' paths of repository files: skips _m365/ at the top and
-    __pycache__ / .git everywhere; symbolic links are ignored."""
+    """Relative '/' paths of repository files: skips _m365/ at the top and SKIP_DIRS
+    everywhere; symbolic links are ignored."""
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = os.path.relpath(dirpath, root)
@@ -254,6 +257,9 @@ def cmd_finish(args):
     if recorded is not None and recorded != args.verdict:
         raise RoundError("_m365/AUDIT.md records %s for round %d but --verdict is %s"
                          % (recorded, round_no, args.verdict), code=2)
+    if args.verdict == "PASS" and recorded is None:
+        raise RoundError("--verdict PASS needs _m365/AUDIT.md to record PASS for round %d; run "
+                         "`audit_checks.py report --round %d` first, or record FAIL" % (round_no, round_no), code=2)
     max_rounds = int(state.get("max_rounds", DEFAULT_MAX_ROUNDS))
     status = compute_status(args.workdir)
     notes = args.notes or ""

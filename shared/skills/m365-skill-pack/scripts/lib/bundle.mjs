@@ -21,8 +21,18 @@ export function unsafePathReason(p) {
     if (isGitSegment(s)) return '.git segment'
     if (/[:<>"|?*]/.test(s) || /[\x00-\x1f]/.test(s)) return 'reserved character in segment'
     if (/[. ]$/.test(s)) return 'segment ends with a dot or space'
+    // `### FILE <path> [flags]` would read the suffix as header flags.
+    if (/ \[[^\]]*\]$/.test(s)) return 'segment ends with " [...]", which the Markdown header reserves for flags'
+    if (isWindowsDeviceName(s)) return 'Windows reserved device name'
+    if (/~\d/.test(s)) return '8.3 short-name pattern (~N) in segment'
   }
   return null
+}
+
+/** CON, PRN, AUX, NUL, COM1-9, LPT1-9 in any letter case, with or without an extension. */
+export function isWindowsDeviceName(seg) {
+  const stem = seg.replace(/[. ]+$/, '').split('.')[0].replace(/ +$/, '')
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem)
 }
 
 /**
@@ -56,6 +66,42 @@ export function isBinary(data, path = '') {
   const n = Math.min(data.length, 8192)
   for (let i = 0; i < n; i++) if (data[i] === 0) return true
   return false
+}
+
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/** Strict UTF-8 decode (BOM kept); null when the bytes are not valid UTF-8. */
+export function decodeUtf8(data) {
+  try {
+    return UTF8.decode(data)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The text normalisation formatBundle applies to every file: strict UTF-8, BOM dropped,
+ * CRLF and lone CR to LF. null when the bytes are not UTF-8. A sandbox that started from
+ * a Markdown bundle hashed exactly this, so the unpacker compares against it too.
+ */
+export function normaliseText(data) {
+  const text = decodeUtf8(data)
+  return text === null ? null : text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+/**
+ * Give new text bytes the BOM and CRLF style of the local file they replace, so a file
+ * that differs from the snapshot only by that normalisation keeps its style. Bytes that
+ * are not UTF-8 text are returned unchanged.
+ */
+export function restoreTextStyle(data, local) {
+  const text = decodeUtf8(data)
+  const localText = local ? decodeUtf8(local) : null
+  if (text === null || localText === null) return data
+  let out = text
+  if (localText.startsWith('\uFEFF') && !out.startsWith('\uFEFF')) out = `\uFEFF${out}`
+  if (localText.includes('\r\n')) out = out.replace(/\r?\n/g, '\r\n')
+  return out === text ? data : Buffer.from(out, 'utf8')
 }
 
 function longestBacktickRun(text) {
@@ -95,7 +141,8 @@ export function formatBundle(spec) {
   out.push('')
   for (const f of files) {
     assertSafePath(f.path)
-    let text = f.data.toString('utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    let text = normaliseText(f.data)
+    if (text === null) throw new Error(`bundle: ${f.path} is not UTF-8 text`)
     const hasContent = text.length > 0
     const noeol = hasContent && !text.endsWith('\n')
     if (!noeol && text.endsWith('\n')) text = text.slice(0, -1)
@@ -181,12 +228,6 @@ export function parseBundle(text) {
     i = j
   }
   return { header, files, deletes, skipped }
-}
-
-/** Keep CRLF when the existing target file uses CRLF; new files get LF. */
-export function matchLineEndings(content, existing) {
-  if (existing && existing.includes('\r\n')) return content.replace(/\r?\n/g, '\r\n')
-  return content
 }
 
 /** Pull the machine-readable summary out of _m365/AUDIT.md. Returns null when absent or malformed. */
