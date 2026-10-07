@@ -1,0 +1,13 @@
+# The workflows pin third-party actions to commit SHAs (with the tag as a comment);
+# Dependabot keeps those pins current. noxitro/github-templates is tracked at @main on purpose.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    ignore:
+      - dependency-name: noxitro/github-templates

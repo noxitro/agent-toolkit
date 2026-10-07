@@ -21,11 +21,11 @@ jobs:
     outputs:
       exit_code: ${{ steps.lychee.outputs.exit_code }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Check links
         id: lychee
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           # Generated files repeat the links of their sources, so only the sources are checked.
           args: >-
@@ -41,7 +41,7 @@ jobs:
       # The report is handed to the issue job, which is the only one allowed to write issues.
       - name: Keep the report
         if: steps.lychee.outputs.exit_code != '0' && github.event_name == 'schedule'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lychee-report
           path: lychee/out.md
@@ -56,7 +56,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: lychee-report
           path: lychee
@@ -72,7 +72,7 @@ jobs:
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
       - name: Open or update the issue
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@e8ef132d6df98ed982188e460ebb3b5d4ef3a9cd # v5.0.1
         with:
           title: Link check failed
           content-filepath: ./lychee/out.md

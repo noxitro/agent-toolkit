@@ -10,10 +10,11 @@ harness:
   opencode:
     frontmatter:
       mode: subagent
-      tools:
-        write: false
-        edit: false
-        bash: false
+      # `permission` replaces the deprecated `tools` map; `edit` also covers write and apply_patch.
+      permission:
+        edit: deny
+        bash: deny
+        webfetch: deny
   copilot:
     frontmatter:
       tools: ["read", "search", "codebase"]

@@ -36,6 +36,8 @@ jobs:
       issues: write          # 会話欄に返信する
       id-token: write        # Claude GitHub App の認証に使う
       actions: read          # CI の結果を読んで答えられるように
+    # 自分の共通リポジトリなので @main を追う (直したらどのリポジトリにも即反映させたい)。
+    # 外部の action は SHA で固定し、Dependabot で更新する。
     uses: noxitro/github-templates/.github/workflows/claude-agent.yml@main
     # 共通側で使う Secret だけを渡す (secrets: inherit だとリポジトリの Secret がすべて渡る)。
     # 無いものは空のまま渡り、共通側で扱う。

@@ -1,10 +1,10 @@
 ---
 description: Read-only reviewer for shared agent assets. Use before publishing a new or changed skill, command or agent to check the shared contract, trigger quality of the description, and the per-harness portability traps.
 mode: subagent
-tools:
-  write: false
-  edit: false
-  bash: false
+permission:
+  edit: deny
+  bash: deny
+  webfetch: deny
 ---
 
 <!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/agents/asset-reviewer.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->
