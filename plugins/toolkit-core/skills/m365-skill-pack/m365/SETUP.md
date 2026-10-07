@@ -65,7 +65,7 @@ node <skill-dir>/scripts/pack-skill.mjs <skill-dir>/m365/skills/implement <skill
 4. 機能トグルは probe の結果に従う(既定は「ドキュメント、グラフ、コードの作成」ON)。
 5. 「スキル」→「追加」で `implement.zip`、続けて `audit.zip` をアップロードする。
 6. **ナレッジは追加しない**(スキルと埋め込みファイルは併用できない)。
-7. スターター プロンプトを 2 つ登録する(シートの表)。
+7. スターター プロンプト「Run the loop」を登録する(シートの表)。
 8. 保存し、共有は「自分だけ」から始める。
 
 ## 4. `auditor` を作る
@@ -74,7 +74,8 @@ node <skill-dir>/scripts/pack-skill.mjs <skill-dir>/m365/skills/implement <skill
 
 ## 5. 動作確認(hello タスク)
 
-1. ローカルで 2 ファイル程度の小さなリポジトリに `_m365/TASK.md` を書き、わざと 1 つ失敗する
+1. ローカルで 2 ファイル程度の小さなリポジトリに `.m365/<slug>/TASK.md` を書き(ZIP の中では
+   `_m365/TASK.md` になる)、わざと 1 つ失敗する
    受け入れ基準(例: 禁止パターン `print\(` を含むコードを許さない)を入れる。
 2. `make-input.mjs` で入力 ZIP を作り、`impl-loop` に添付して「Run the loop」を送る。
 3. 2 ラウンド回って `out-<slug>-r2.zip` が返り、OneDrive に保存されることを確認する。

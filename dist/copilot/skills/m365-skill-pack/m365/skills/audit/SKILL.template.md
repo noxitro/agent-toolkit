@@ -18,8 +18,10 @@ verdict.
   merges the checks with your judgements and rewrites `_m365/AUDIT.md`.
 - `scripts/bundle_io.py unpack <bundle> <workdir>` / `pack <workdir> <out> --kind audit` -
   only needed when the thing to audit arrived as an attachment rather than as a working
-  directory you already have. `unpack` recognises an output bundle on its own: every
-  file in it counts as changed, the implementer's report is kept aside as
+  directory you already have. `unpack` recognises an output bundle on its own: when it
+  carries the input manifest (`pack --full`, the implementer's default) `status` shows
+  the real changes and untouched files are there to read; without a manifest every file
+  counts as changed. The implementer's report is kept aside as
   `_m365/AUDIT.implementer.md` (read it as a claim, not as evidence), and deletions are
   listed in `_m365/DELETED.txt`.
 

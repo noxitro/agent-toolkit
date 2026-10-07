@@ -95,17 +95,32 @@ function insideDir(base, abs) {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(/[\\/]/).some(isGitSegment)
 }
 
+/** lstat-based existence: a dangling symlink counts as present (existsSync would follow it and say no). */
+function existsL(p) {
+  try {
+    lstatSync(p)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
- * Lexical containment is not enough once a directory inside the repository is a symlink
- * to somewhere else: resolve the nearest existing ancestor and require its real path to
- * stay inside the real base. A path whose final component is itself a symlink is refused.
+ * Lexical containment is not enough once something on the path is a symlink: find the
+ * nearest existing path component with lstat (so a dangling link is seen, not skipped),
+ * refuse it outright if it is a symlink, and require the real path of what remains to
+ * stay inside the real base.
  */
 function realInside(base, abs) {
   if (!insideDir(base, abs)) return false
   let probe = abs
-  while (!existsSync(probe)) probe = dirname(probe)
+  while (!existsL(probe)) {
+    const up = dirname(probe)
+    if (up === probe) return false
+    probe = up
+  }
   try {
-    if (lstatSync(probe).isSymbolicLink() && probe === abs) return false
+    if (lstatSync(probe).isSymbolicLink()) return false
   } catch {
     return false
   }
@@ -164,21 +179,31 @@ function hashesOf(buf) {
   return out
 }
 
+// Phase 1: decide every write and delete, refusing the whole bundle on any unsafe
+// destination. Phase 2 performs them, so a refusal never leaves a half-applied tree.
+const plan = []
+// An audit-only bundle (from the `auditor` agent) must not overwrite the implementer's
+// report already in the reports directory; it is saved beside it instead.
+const auditOnly = files.every((f) => isProtocolPath(f.path))
+let auditSavedAs = null
+if (!opts.reports && existsL(join(repo, '.m365')) && !realInside(repo, join(repo, '.m365'))) throw new Error(`refusing to use ${join(repo, '.m365')}: it leaves the repository`)
+
 for (const f of files) {
   if (isProtocolPath(f.path)) {
-    const dest = resolve(reportsDir, f.path.slice(PROTOCOL_PREFIX.length))
-    if (!opts['dry-run']) mkdirSync(reportsDir, { recursive: true })
-    if (!(opts['dry-run'] ? insideDir(reportsDir, dest) : realInside(reportsDir, dest))) throw new Error(`refusing to write outside the reports directory: ${f.path}`)
-    reports.push(f.path)
-    if (!opts['dry-run']) {
-      mkdirSync(dirname(dest), { recursive: true })
-      writeFileSync(dest, f.data)
+    let dest = resolve(reportsDir, f.path.slice(PROTOCOL_PREFIX.length))
+    if (auditOnly && f.path === `${PROTOCOL_PREFIX}AUDIT.md` && existsL(dest)) {
+      dest = join(dirname(dest), 'AUDIT.auditor.md')
+      auditSavedAs = dest
     }
+    const contained = existsL(reportsDir) ? realInside(reportsDir, dest) : insideDir(reportsDir, dest)
+    if (!contained) throw new Error(`refusing to write outside the reports directory: ${f.path}`)
+    reports.push(f.path)
+    plan.push({ kind: 'write', dest, data: f.data })
     continue
   }
   const dest = resolve(repo, f.path)
   if (!insideRepo(dest)) throw new Error(`refusing to write outside the repository: ${f.path}`)
-  const exists = existsSync(dest)
+  const exists = existsL(dest)
   let data = f.data
   if (f.text && exists) data = Buffer.from(matchLineEndings(f.data.toString('utf8'), readFileSync(dest, 'utf8')), 'utf8')
   const local = exists ? readFileSync(dest) : null
@@ -207,15 +232,12 @@ for (const f of files) {
     continue
   }
   ;(exists ? modified : added).push(f.path)
-  if (!opts['dry-run']) {
-    mkdirSync(dirname(dest), { recursive: true })
-    writeFileSync(dest, data)
-  }
+  plan.push({ kind: 'write', dest, data })
 }
 for (const d of deletes) {
   const dest = resolve(repo, d)
   if (!insideRepo(dest)) throw new Error(`refusing to delete outside the repository: ${d}`)
-  if (!existsSync(dest)) continue
+  if (!existsL(dest)) continue
   const base = baseOf(d)
   // With a baseline, deleting is allowed only for a file the sandbox saw and that is
   // still at its snapshot state; anything else here is newer than what was judged.
@@ -224,12 +246,21 @@ for (const d of deletes) {
     continue
   }
   deleted.push(d)
-  if (!opts['dry-run']) unlinkSync(dest)
+  plan.push({ kind: 'delete', dest })
+}
+
+if (!opts['dry-run']) {
+  for (const step of plan) {
+    if (step.kind === 'write') {
+      mkdirSync(dirname(step.dest), { recursive: true })
+      writeFileSync(step.dest, step.data)
+    } else unlinkSync(step.dest)
+  }
 }
 
 // ---------------------------------------------------------------- report
 const verdict = audit.summary?.verdict ?? null
-const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, baseline: !!baseline, added, modified, unchanged, kept, conflicts, deleted, reports: reports.map((p) => join(reportsDir, p.slice(PROTOCOL_PREFIX.length))), auditError: audit.error ?? null }
+const summary = { bundle: file, task, dryRun: !!opts['dry-run'], verdict, finalRound: audit.summary?.final_round ?? null, baseline: !!baseline, added, modified, unchanged, kept, conflicts, deleted, reports: reports.map((p) => (p === `${PROTOCOL_PREFIX}AUDIT.md` && auditSavedAs ? auditSavedAs : join(reportsDir, p.slice(PROTOCOL_PREFIX.length)))), auditSavedAs, auditError: audit.error ?? null }
 
 if (opts.json) console.log(JSON.stringify(summary, null, 2))
 else {
@@ -243,6 +274,7 @@ else {
   for (const p of kept) console.log(`    = ${p}  (untouched in the sandbox; local copy kept)`)
   for (const p of conflicts) console.log(`    ! ${p}  (changed both locally and in the sandbox; not written - resolve by hand or rerun with --force)`)
   for (const p of summary.reports) console.log(`    r ${p}`)
+  if (auditSavedAs) console.log(`  the independent audit was saved as AUDIT.auditor.md so the implementer's AUDIT.md stays; compare the two verdicts.`)
   if (audit.summary) {
     for (const r of audit.summary.rounds ?? []) {
       const fails = (r.checks ?? []).filter((c) => c.status !== 'PASS')

@@ -1,3 +1,7 @@
+# Everything is LF in this repository; a core.autocrlf=true checkout must not turn the
+# sources (and the byte-compared generated copies) into CRLF.
+* text=auto eol=lf
+
 # Files that end up inside Microsoft 365 skill packages must stay LF: a CRLF shebang
 # fails in the Linux sandbox and SKILL.md must be UTF-8 without BOM.
 shared/skills/m365-skill-pack/m365/** text eol=lf

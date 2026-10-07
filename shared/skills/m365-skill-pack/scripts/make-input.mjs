@@ -162,7 +162,7 @@ for (const conv of CONVENTION_FILES) {
   } catch {
     continue
   }
-  if (st.isSymbolicLink()) {
+  if (st.isSymbolicLink() || !dirInsideRepo(dirname(abs))) {
     skipped.push({ path: conv, reason: 'symbolic link (conventions file)' })
     continue
   }

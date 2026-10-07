@@ -115,6 +115,8 @@ the "Measured" tables before relying on the sandbox for real work.
 - The sandbox cannot run git. Deletions come back as `_m365/DELETED.txt`, renames as
   delete plus add.
 - A PASS from `impl-loop` is self-review. For anything that matters, run `auditor` too
-  and compare the two verdicts; a disagreement is the finding.
+  and compare the two verdicts; a disagreement is the finding. Ingesting the audit bundle
+  after the output bundle saves it as `reports/AUDIT.auditor.md` next to the
+  implementer's `AUDIT.md`.
 - Machine-specific paths do not belong in task contracts or bundles; the sandbox never
   sees your disk.
