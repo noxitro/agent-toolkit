@@ -1,3 +1,7 @@
 {
-  "claudePlugin": "toolkit-core"
+  "claudePlugin": "toolkit-core",
+  "links": [
+    { "path": "~/.claude/skills/m365-skill-pack", "target": "plugins/toolkit-core/skills/m365-skill-pack" },
+    { "path": "~/.copilot/skills/m365-skill-pack", "target": "dist/copilot/skills/m365-skill-pack" }
+  ]
 }
