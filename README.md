@@ -80,13 +80,6 @@ cp -r dist/copilot/. .github/
 1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
 場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
 
-### 職場で使う場合
-
-このリポジトリは外部の AI にコードを送る処理を含まないので、職場でもそのまま導入できる。
-コードを見せてよい AI が限られる環境での注意点(同梱される他の資産、データの行き先)と、
-`m365-skill-pack` だけを書き出す方法(`npm run export:m365 -- <dir>`)は
-[docs/workplace-fork.md](docs/workplace-fork.md)。
-
 ### このクローンからシンボリックリンクで導入(開発中の自分用)
 
 コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクをユーザーレベルの探索場所に張ると、
@@ -162,7 +155,6 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
-| `npm run export:m365 -- <dir>` | `m365-skill-pack` だけを本番用リポジトリとして書き出す。外部モデル・通信 API・許可外 URL を検査し、見つかれば書かない。`--check` でずれを検査 |
 | `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
 
 ## CI
