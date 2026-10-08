@@ -64,17 +64,27 @@ python-docx や openpyxl などを前提にするものがあり、それを採�
 - 各スキルに `LICENSE.txt`(元のリポジトリの LICENSE そのまま)と `SOURCE.md`(取り込んだコミットと変更点)を同梱する。
 - `third-party/_upstream/` は元の `SKILL.md` の写し。上流が更新されたときの差分確認に使う(ZIP には入らない)。
 - 評価の記録(採用しなかったものと理由を含む)は [external-skills.md](external-skills.md)。
+- **新しく公開スキルを探して ZIP にする手順と道具**は [scout/README.md](scout/README.md)(スキル スカウト)。誰でも同じ手順で、
+  候補を集めて機械で検査し、中身を読んで選んだものだけを ZIP にできる。
 
-上流が更新されたときの取り込み直し:
+上流が更新されたときの取り込み直し(必要なもの: Node.js 20 以上と git。Python は要らない):
 
 ```bash
-git clone --depth 1 https://github.com/github/awesome-copilot <作業フォルダ>/awesome-copilot
-git clone --depth 1 https://github.com/microsoft/cat-agent-skills <作業フォルダ>/cat-agent-skills
-python m365-org-skills/third-party/import_upstream.py --src <作業フォルダ>
+# 上流を安全に取得する(浅い・部分的な clone。シンボリック リンクは作らず、中身は実行しない)
+node m365-org-skills/scout/scout.mjs fetch --source github/awesome-copilot
+node m365-org-skills/scout/scout.mjs fetch --source microsoft/cat-agent-skills
+# 取り込み直す(--only incident-postmortem,prd のように一部だけでもよい)
+node m365-org-skills/scout/import-upstream.mjs --src artifacts/skill-scout/cache/node_modules
 ```
 
+`--src` には、リポジトリ名のフォルダ(`awesome-copilot`、`cat-agent-skills`)に clone を置いたフォルダを渡す。
+自分で `git clone` したフォルダを渡してもよい。取得先が `node_modules` という名前なのは、`npm test`(`node --test`)などの
+テストの自動検出が、上流のファイル(`test-helper.js` など)を拾って実行しないようにするため。
+上流の clone をこのリポジトリの中の別の場所に置かない。
+
 そのあと `git diff m365-org-skills/third-party` で**フォルダ全体の**変更(`SKILL.md` の原文、`references/`・`assets/` の中身、LICENSE)を読み、
-問題が無ければ `npm test` で確認する。取り込みスクリプトは、シンボリック リンクや上流フォルダの外を指すパスを見つけると、何も書き換えずに止まる。
+問題が無ければ `npm test` で確認する。取り込みスクリプトは、シンボリック リンク(git にリンクとして記録されたものを含む)・サブモジュール・
+上流フォルダの外を指すパス・無いファイルを見つけると、どのスキルも書き換えずに止まる。
 **新しい版の中身を読まずに取り込まない**(スキルは AI への指示そのもの)。
 
 ### 保留中(今回のラインナップから外したもの)
@@ -146,6 +156,8 @@ npm test
 - `tests/m365-org-thirdparty.test.mjs`: 公開スキルの「原文」以降が `_upstream/` の写しと 1 文字も違わないこと、ライセンスと出典があること、
   ZIP の検査を通ること、定義シートが実在するスキルだけを 8 個以内で指していることを確かめる。
   上流そのものとの一致は、取り込み直したときの `git diff` で確かめる(テストはネットワークを使わない)。
+- `tests/m365-org-scout.test.mjs`: スキル スカウト(`scout/`)の判定・`adopt`/`build` の拒否・ZIP 化と、取り込みスクリプトが
+  シンボリック リンクや無いファイルで既存のパッケージを書き換えずに止まることを、`git init` で作った偽の上流で確かめる(ネットワークは使わない)。
 
 ## 確かめていないこと
 

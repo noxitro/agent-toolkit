@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "Keyword lists used by scout.mjs scan. Each entry: label (Japanese, shown in the report) and pattern",
+    "(a JavaScript regular expression; flags default to 'i', set \"flags\": \"\" for case-sensitive; a space also matches a line break).",
+    "privacy: flagged as 要確認 for a human to judge; never rejected automatically.",
+    "harness: text written for another tool that needs a 読み替え (要書き換え).",
+    "cliTools: command-line tools that the Microsoft 365 sandbox does not have (不可)."
+  ],
+  "privacy": [
+    {
+      "label": "参加者・個人の人物像の推定(ペルソナ・プロファイル)",
+      "pattern": "persona profiles? of (the )?(participants|attendees|people|speakers|employees|individuals|team members|stakeholders)|profile (each|every|all)( identifiable)? (participant|attendee|person|speaker|employee|individual)s?|(psychological|personality|behaviou?ral) profil(e|es|ing)|personality (traits|type|assessment)"
+    },
+    {
+      "label": "力関係・言外の意図の推定",
+      "pattern": "power dynamics|unspoken tensions?|hidden agendas?|what (was|is|wasn't|isn't) (left )?unsaid|read(ing)? between the lines"
+    },
+    {
+      "label": "個人の評価(人事評価・業績評価)",
+      "pattern": "performance (reviews?|evaluations?|appraisals?)[^\\n]{0,60}(self-assessment|employee|manager|peer|colleague|direct report|calibration)|(self-assessment|employee|manager|peer|colleague|direct report)s?[^\\n]{0,60}performance (reviews?|evaluations?|appraisals?)|(write|draft)(ing|s)? (a |an |my |the )?performance (reviews?|appraisals?)|360 feedback|upward feedback|evaluat(e|es|ing) (an |the |each )?(employee|individual|team member)s?|(rate|score|rank)s? (each |every |the )?(employee|individual|participant|team member)s?"
+    },
+    {
+      "label": "特定の人への感情・態度の推定",
+      "pattern": "sentiment (toward|towards|about|of) (each |the |every )?(participant|person|speaker|employee|individual|people|colleague)s?|emotional state of|body language|infer(s|ring)? (their |the |each )?(participant'?s? )?(motives?|intentions?|emotions?|feelings?)"
+    },
+    {
+      "label": "個人情報(PII)の抽出・取り扱い",
+      "pattern": "(extract|collect|harvest|gather|scrape|compile|identify|find)(s|ing)? [^.\\n]{0,30}(PII|personally identifiable|personal (data|information|details)|contact (details|information))|social security numbers?"
+    },
+    {
+      "label": "人物評価(日本語)",
+      "pattern": "人物像|性格|人事評価|力関係|個人情報"
+    }
+  ],
+  "harness": [
+    { "label": "${input:...} の変数", "pattern": "\\$\\{input:" },
+    { "label": "${selection} などのエディタ変数", "pattern": "\\$\\{(selection|selectedText|file|workspaceFolder)\\}" },
+    { "label": "docs/ などへの保存指示", "pattern": "(save|write|create|store|place|output)[^\\n]{0,40}\\b(docs?|documentation)/" },
+    { "label": "claude -p の呼び出し", "pattern": "\\bclaude\\s+-p\\b" },
+    { "label": "サブエージェント", "pattern": "\\bsub-?agents?\\b|\\bTask tool\\b" },
+    { "label": "MCP / コネクタの ~~ プレースホルダー", "pattern": "~~[A-Za-z][\\w-]*(?![^\\n]*~~)" },
+    { "label": "MCP サーバー前提", "pattern": "\\bMCP\\b", "flags": "" },
+    { "label": "Slack", "pattern": "\\bSlack\\b", "flags": "" },
+    { "label": "Google Drive / Docs / Sheets", "pattern": "\\bGoogle (Drive|Docs|Sheets)\\b" },
+    { "label": "Jira", "pattern": "\\bJira\\b", "flags": "" },
+    { "label": "PagerDuty", "pattern": "\\bPagerDuty\\b", "flags": "" },
+    { "label": "Confluence", "pattern": "\\bConfluence\\b", "flags": "" },
+    { "label": "Notion", "pattern": "\\bNotion\\b", "flags": "" }
+  ],
+  "cliTools": [
+    { "label": "LibreOffice (soffice)", "pattern": "\\b(soffice|libreoffice)\\b" },
+    { "label": "pandoc", "pattern": "\\bpandoc\\b" },
+    { "label": "markitdown", "pattern": "\\bmarkitdown\\b" },
+    { "label": "Playwright", "pattern": "\\bplaywright\\b" },
+    { "label": "Tesseract", "pattern": "\\btesseract\\b" },
+    { "label": "pdftoppm (poppler)", "pattern": "\\bpdftoppm\\b" },
+    { "label": "qpdf", "pattern": "\\bqpdf\\b" },
+    { "label": "ffmpeg", "pattern": "\\bffmpeg\\b" },
+    { "label": "npm / npx によるインストール・実行", "pattern": "\\bnpm\\s+(install|i|ci)\\b|\\bnpx\\s+[\\w@]" },
+    { "label": "pip install", "pattern": "\\bpip3?\\s+install\\b|\\buv\\s+pip\\b|\\bpython3?\\s+-m\\s+pip\\b" },
+    { "label": "Docker", "pattern": "\\bdocker(\\s+compose)?\\s+(run|build|exec|pull|push|compose)\\b|\\bdocker-compose\\b" }
+  ]
+}

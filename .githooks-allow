@@ -1,2 +1,6 @@
 # 公開スキルに同梱する MIT ライセンス本文。著作権表示は MIT の条件として残す必要がある(m365-org-skills/external-skills.md で確認済み)。
 m365-org-skills/third-party/root-cause-analysis/LICENSE.txt
+# スキル スカウトがライセンス文を判定するための検出用の語句(独自ライセンスの見分け方)。
+m365-org-skills/scout/lib/checks.mjs
+# スキル スカウトのテストが偽の上流リポジトリに置く、試験用のライセンス文。
+tests/m365-org-scout.test.mjs
