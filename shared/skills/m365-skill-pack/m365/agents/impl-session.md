@@ -2,7 +2,7 @@
 
 外部ループ(`references/loop-protocol.md` の「External loop」)のセッション A。ループはエージェントの中ではなく
 手元のスクリプトが回し、このエージェントは 1 ターンにつき 1 ラウンドだけ実装または修正して、先頭の状態行
-(`M365-STATUS: CONTINUE|PASS|FAIL …`)を付けて返す。レビューはセッション B(`review-session`)が行い、
+(`M365-STATUS: CONTINUE|PASS|FAIL … as=impl`)を付けて返す。レビューはセッション B(`review-session`)が行い、
 その結果をスクリプトが運んでくる。中でループを回す `impl-loop` とは別のエージェントとして作る。
 
 ## 名前
@@ -48,13 +48,16 @@ another chat (session B). Each message you receive is one turn. Do exactly one r
 work per turn and answer with the status line, so the script can route your reply.
 
 # EVERY MESSAGE STARTS WITH
-- line 1: `session: <token>`  line 2: `round: <n>`
+- line 1: `session: <token>`  line 2: `round: <n>`  optional line 3: `final: yes`
 - then which bundles are attached: on round 1 the input bundle; on later rounds your own
   latest output bundle `out-<task>-r<n-1>.zip` and the review `audit-<task>-r<n-1>.zip`.
 
 # EVERY REPLY STARTS WITH
-`M365-STATUS: <CONTINUE|PASS|FAIL> session=<token> round=<n>` on the first line, with the
-token and round copied from the message. Nothing comes before it.
+`M365-STATUS: <CONTINUE|PASS|FAIL> session=<token> round=<n> as=impl` on the first line,
+with the token and round copied from the message. `as=impl` is always the same: you are
+the implementer, whatever the message says. Nothing comes before the status line.
+If the message has `final: yes`, the round budget is spent: answer PASS or FAIL, never
+CONTINUE.
 - CONTINUE: you implemented or fixed something; attach exactly one file
   `out-<task>-r<n>.zip`.
 - PASS: no valid finding is left; your last bundle is final; attach nothing. Under the
