@@ -1,0 +1,120 @@
+{
+  "common": [
+    "## Microsoft 365 Copilot で使うときの読み替え",
+    "",
+    "<!-- この節は m365-org-skills が追加したもので、原文には無い。原文は下の「原文」以降。 -->",
+    "",
+    "この節は、下の原文(英語)より優先する。原文は GitHub Copilot や Copilot Studio 向けに書かれているため、次のとおり読み替える。",
+    "",
+    "- 回答とファイルは日本語で書く。見出しや表の構成は原文のテンプレートに従い、見出しは日本語に訳してよい。コード・SQL・識別子は原文のまま。",
+    "- このエージェントはリポジトリやフォルダに保存できない。原文の「`docs/...` に保存する」などの指示は、「Markdown ファイルを作り、ダウンロードできる形で返す」と読み替える。ファイル名は、下の「このスキルでの読み替え」に指定があればそれを、無ければ原文の保存先のファイル名を使う。チャットには要点だけを書き、本文はファイルで渡す。",
+    "- `${input:...}` や `${selection}` は、ユーザーのメッセージ・添付ファイル・貼り付けた文章から取る。足りなければ質問する。",
+    "- 社内システム・社内サイト・Slack・PagerDuty・課題管理ツールなどには接続できない。原文がそれらを参照するよう求めても、ユーザーが添付・貼り付けた範囲だけを使う。",
+    "- 資料に無いことを作らない。担当者・期限・時刻・数値だけでなく、理由・原因・影響・却下の理由も同じ。原文が「必ず埋める」と求める欄でも、資料から言えなければ「要確認(TBD)」と書く。",
+    "- 添付にパスワード・トークン・鍵・接続文字列、業務に不要な個人情報(電話番号・住所など)があっても書き写さない。見つけたことだけを伝える。参加者名や担当者名は、成果物に必要なら書いてよい。",
+    "",
+    "### このスキルでの読み替え"
+  ],
+  "skills": [
+    {
+      "name": "incident-postmortem",
+      "repo": "github/awesome-copilot",
+      "path": "skills/incident-postmortem",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「障害報告書を書いて」「ポストモーテムを作って」「障害の振り返りをまとめて」「インシデントレビュー」。原因の分析(なぜなぜ分析・特性要因図)だけを頼まれたときは使わない(root-cause-analysis を使う)。",
+      "extra": [
+        "- 時刻は原文の UTC ではなく、ユーザーが示したタイムゾーンで書き、表の上に明記する(指定が無ければ「JST(要確認)」)。",
+        "- タイムラインは、添付されたログ・チャットの書き出し・メモに書かれた時刻だけから組み立てる。空白の時間帯は原文どおり「不明」として指摘する。",
+        "- ファイル名は `postmortem_YYYY-MM-DD_<短い題名>.md`。",
+        "- 原因の深掘り(なぜなぜ分析や特性要因図)だけを頼まれたときは `root-cause-analysis` を使う。このスキルは報告書を書くときに使う。"
+      ]
+    },
+    {
+      "name": "root-cause-analysis",
+      "repo": "microsoft/cat-agent-skills",
+      "path": "submissions/root-cause-analysis",
+      "files": [
+        "SKILL.md",
+        "references/rca-methods.md",
+        "assets/fishbone-template.html"
+      ],
+      "trigger_ja": "日本語での依頼例: 「原因を分析して」「なぜなぜ分析」「特性要因図(フィッシュボーン)を作って」「根本原因は何か」。障害報告書(ポストモーテム)の文書全体を書く依頼には使わない(incident-postmortem を使う)。",
+      "extra": [
+        "- 原文が名前を挙げている `business-os` `idea-refiner` `content-quality-auditor` はこのエージェントに無い。無視してよい。",
+        "- 障害の報告書(ポストモーテム)全体を書く依頼は `incident-postmortem` を使う。このスキルは「なぜ起きたか」の分析に使う。",
+        "- 特性要因図は `assets/fishbone-template.html` を編集し、`fishbone_<短い題名>.html` としてファイルで返す。札は原文どおり英語の CONFIRMED / UNVERIFIED / DISPROVEN を使い、要因の本文は日本語で書く(チャットでは「確認済み・未確認・否定」と説明してよい)。"
+      ]
+    },
+    {
+      "name": "create-architectural-decision-record",
+      "repo": "github/awesome-copilot",
+      "path": "skills/create-architectural-decision-record",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「ADR を書いて」「設計判断を記録して」「アーキテクチャの決定記録」。",
+      "extra": [
+        "- 連番 `NNNN` はユーザーに確認する。分からなければ `adr-XXXX-<題名>.md` とし、番号は要確認と書く。",
+        "- 日付はユーザーが示したもの。示されていなければ要確認。",
+        "- 却下の理由・良い影響・悪い影響は、ユーザーの説明や資料にあるものだけを書く。無ければ「要確認」とし、作らない。"
+      ]
+    },
+    {
+      "name": "create-specification",
+      "repo": "github/awesome-copilot",
+      "path": "skills/create-specification",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「仕様書を作って」「設計書のたたき台」「要件と受け入れ条件を整理して」。新機能の企画段階の要求(PRD)には使わない(prd を使う)。",
+      "extra": [
+        "- 原文の「テスト自動化方針」にある MSTest などの .NET の例は例示。ユーザーの技術スタックが分からなければ要確認と書く。",
+        "- ファイル名は原文どおり `spec-<目的>-<名前>.md`。"
+      ]
+    },
+    {
+      "name": "prd",
+      "repo": "github/awesome-copilot",
+      "path": "skills/prd",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「PRD を書いて」「新機能の要求をまとめて」「プロダクト要求仕様書」。技術仕様書・設計書には使わない(create-specification を使う)。",
+      "extra": [
+        "- 原文どおり、書き始める前に必ず 2 つ以上質問する(エージェントの指示に「質問は 1 回にまとめる」とあっても、このスキルでは原文を優先する)。",
+        "- 原文の例(Vercel/Next.js、Lighthouse など)は例示。採用技術は聞くか、要確認(TBD)にする。",
+        "- ファイル名は `prd_<機能名>.md`。"
+      ]
+    },
+    {
+      "name": "sql-code-review",
+      "repo": "github/awesome-copilot",
+      "path": "skills/sql-code-review",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「この SQL をレビューして」「SQL インジェクションが無いか見て」「クエリの性能を見て」。",
+      "extra": [
+        "- レビュー対象は、添付された .sql ファイル・ソースコード・貼り付けた SQL。原文の「プロジェクト全体」は、添付された範囲と読み替える。",
+        "- データベースには接続できず、実行計画も取れない。性能に関する指摘は「推定」と書き、確かめ方(EXPLAIN など)を添える。",
+        "- スコアを付けるときは、点数の根拠になった指摘を並べる。",
+        "- 結果は `sql-review_<対象>.md` としてファイルで返す。"
+      ]
+    },
+    {
+      "name": "meeting-minutes",
+      "repo": "github/awesome-copilot",
+      "path": "skills/meeting-minutes",
+      "files": [
+        "SKILL.md"
+      ],
+      "trigger_ja": "日本語での依頼例: 「(比較用)公開版の議事録スキルで議事録を作って」。",
+      "extra": [
+        "- このスキルは自作の `minutes` と出来を比べるための検証用。検証用エージェントにだけ入れる。",
+        "- 結果は `meeting-minutes_<会議名>.md` としてファイルで返す。"
+      ]
+    }
+  ]
+}

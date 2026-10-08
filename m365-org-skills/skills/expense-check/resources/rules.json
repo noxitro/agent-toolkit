@@ -1,0 +1,47 @@
+{
+  "_説明": "経費チェックのルール。会社ごとに値を書き換えて使う。キーの意味は resources/rules-guide.md を参照。_ で始まるキーは説明用で、スクリプトは読まない。",
+  "columns": {
+    "date": "日付",
+    "amount": "金額",
+    "category": "費目",
+    "payee": "支払先",
+    "description": "摘要",
+    "employee": "申請者",
+    "receipt": "領収書"
+  },
+  "column_aliases": {
+    "date": ["利用日", "支払日", "発生日", "日付"],
+    "amount": ["金額(税込)", "税込金額", "支払金額", "金額"],
+    "category": ["勘定科目", "経費区分", "科目", "費目"],
+    "payee": ["支払先名", "取引先", "店名", "支払先"],
+    "description": ["内容", "用途", "備考", "摘要"],
+    "employee": ["氏名", "社員名", "申請者"]
+  },
+  "required_columns": ["date", "amount", "category", "payee"],
+  "required_values": ["date", "amount", "category", "payee"],
+  "category_limits": {
+    "交際費": 20000,
+    "会議費": 5000,
+    "交通費": 50000,
+    "宿泊費": 15000,
+    "消耗品費": 30000
+  },
+  "default_limit": null,
+  "unknown_category": "warn",
+  "nonpositive_amount": "warn",
+  "forbidden_keywords": ["商品券", "ギフトカード", "金券", "私用", "プライベート", "家族"],
+  "keyword_columns": ["description", "payee"],
+  "max_age_days": 90,
+  "future_date": "error",
+  "reference_date": null,
+  "duplicate_keys": ["date", "amount", "payee"],
+  "receipt_required_over": null,
+  "flag_weekends": false,
+  "flag_holidays": false,
+  "holidays": [
+    "2026-01-01", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20",
+    "2026-04-29", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",
+    "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23",
+    "2026-10-12", "2026-11-03", "2026-11-23"
+  ]
+}

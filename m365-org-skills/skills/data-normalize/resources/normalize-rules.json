@@ -1,0 +1,20 @@
+{
+  "_説明": "列ごとの正規化規則。column_rules (列名の完全一致) → auto_detect (列名の正規表現、上から順) → default_rule の順に決まる。規則: text / katakana / hiragana / phone / postal / email / nfkc / none。_ で始まるキーは読まない。",
+  "column_rules": {},
+  "auto_detect": [
+    {"pattern": "(?i)mail|メール", "rule": "email"},
+    {"pattern": "(?i)電話|tel|携帯|fax|ファクス|ファックス", "rule": "phone"},
+    {"pattern": "(?i)郵便|〒|zip|postal", "rule": "postal"},
+    {"pattern": "フリガナ|ふりがな|カナ|ヨミ|よみ", "rule": "katakana"}
+  ],
+  "default_rule": "text",
+  "duplicate_keys": [
+    ["メールアドレス"],
+    ["メール"],
+    ["email"],
+    ["氏名", "電話番号"],
+    ["氏名", "電話"],
+    ["会社名", "電話番号"],
+    ["氏名", "生年月日"]
+  ]
+}
