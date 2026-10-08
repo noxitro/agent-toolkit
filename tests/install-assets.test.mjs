@@ -4,9 +4,9 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { after, test } from 'node:test'
-import { allPresetDirs, normalize, presetEntries, staleLinks, userDirs } from '../scripts/lib/presets.mjs'
+import { allPresetDirs, normalize, presetEntries, presetVars, staleLinks } from '../scripts/lib/presets.mjs'
 
 const tmp = mkdtempSync(join(tmpdir(), 'links-'))
 after(() => rmSync(tmp, { recursive: true, force: true }))
@@ -30,7 +30,9 @@ touch(join(root, 'dist/copilot/agents/a1.agent.md'))
 touch(join(root, 'dist/copilot/prompts/c1.prompt.md'))
 touch(join(root, 'dist/copilot/prompts/.hidden'))
 
-const pairs = (links) => links.map((l) => [l.path.slice(home.length + 1), l.target]).sort()
+// Compared with '/' so the expectations hold on Windows too.
+const slash = (p) => p.replace(/\\/g, '/')
+const pairs = (links) => links.map((l) => [slash(l.path.slice(home.length + 1)), slash(l.target)]).sort()
 
 test('claude preset links every plugin asset into ~/.claude', () => {
   assert.deepEqual(pairs(presetEntries(root, ['claude'], opts)), [
@@ -62,8 +64,8 @@ test('copilot preset skips hidden files and drops what ~/.claude already serves'
 })
 
 test('VS Code prompts folder follows the platform', () => {
-  assert.equal(userDirs({ ...opts, platform: 'win32', env: { APPDATA: 'C:\\AppData' } }).copilot.prompts, join('C:\\AppData', 'Code', 'User', 'prompts'))
-  assert.equal(userDirs({ ...opts, platform: 'darwin' }).copilot.prompts, join(home, 'Library', 'Application Support', 'Code', 'User', 'prompts'))
+  assert.equal(presetVars({ ...opts, platform: 'win32', env: { APPDATA: 'C:\\AppData' } }).vscodeUser, join('C:\\AppData', 'Code', 'User'))
+  assert.equal(presetVars({ ...opts, platform: 'darwin' }).vscodeUser, join(home, 'Library', 'Application Support', 'Code', 'User'))
 })
 
 test('staleLinks reports only undeclared symlinks into the repository', () => {
@@ -81,9 +83,21 @@ test('staleLinks reports only undeclared symlinks into the repository', () => {
   assert.deepEqual(stale.map((s) => s.path), [join(skills, 'gone')])
 })
 
-// End to end: run the installer against a throwaway repository and home folder.
+// End to end: run each installer against a throwaway repository and home folder. The Node
+// and PowerShell installers must behave the same, so every scenario runs against both
+// (PowerShell: Windows PowerShell 5.1 and/or pwsh, whichever is installed; skipped if neither).
 
-const script = join(process.cwd(), 'scripts', 'install-assets.mjs')
+function canRun(cmd) {
+  return spawnSync(cmd, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], { stdio: 'ignore' }).status === 0
+}
+const powershells = (process.platform === 'win32' ? ['powershell.exe', process.env.PWSH || 'pwsh'] : [process.env.PWSH || 'pwsh'])
+  .filter((cmd, i, all) => all.indexOf(cmd) === i && canRun(cmd))
+const ps1 = join(process.cwd(), 'scripts', 'install-assets.ps1')
+const installers = [
+  { name: 'node', argv: [process.execPath, join(process.cwd(), 'scripts', 'install-assets.mjs')] },
+  ...powershells.map((cmd) => ({ name: basename(cmd).replace(/\.exe$/i, ''), argv: [cmd, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1] })),
+]
+const skipPs = powershells.length ? false : 'no PowerShell on PATH (set PWSH to its path)'
 
 function fixture(name) {
   const repo = join(tmp, name, 'repo')
@@ -98,86 +112,112 @@ function fixture(name) {
   put('plugins/core/skills/s1/scripts/run.mjs', 'run')
   put('plugins/core/agents/a1.md', 'agent v1')
   mkdirSync(userHome, { recursive: true })
-  const run = (...args) => {
-    const r = spawnSync(process.execPath, [script, ...args], {
-      cwd: repo,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: userHome, USERPROFILE: userHome },
-    })
+  const env = { ...process.env, HOME: userHome, USERPROFILE: userHome, APPDATA: join(userHome, 'AppData', 'Roaming'), AGENT_TOOLKIT_ROOT: repo }
+  delete env.XDG_CONFIG_HOME
+  const runWith = (installer, ...args) => {
+    const [cmd, ...pre] = installer.argv
+    const r = spawnSync(cmd, [...pre, ...args], { cwd: repo, encoding: 'utf8', env, input: '' })
     return { code: r.status, out: r.stdout + r.stderr }
   }
   const home = (p) => join(userHome, p)
-  return { repo, home, put, run, state: () => JSON.parse(readFileSync(home('.agent-toolkit/acme-kit.json'), 'utf8')) }
+  return { repo, home, put, runWith, state: () => JSON.parse(readFileSync(home('.agent-toolkit/acme-kit.json'), 'utf8')) }
 }
 
-test('copy install, update, local edits and uninstall', () => {
-  const f = fixture('copy')
-  let r = f.run('--setup', 'claude')
-  assert.equal(r.code, 0, r.out)
-  assert.ok(lstatSync(f.home('.claude/skills/s1')).isDirectory())
-  assert.equal(readFileSync(f.home('.claude/skills/s1/scripts/run.mjs'), 'utf8'), 'run')
-  assert.equal(f.state().mode, 'copy')
-  assert.deepEqual(f.state().harnesses, ['claude'])
-  assert.equal(f.run('--check').code, 0)
+for (const installer of installers) {
+  const it = (title, fn) => test(`${installer.name}: ${title}`, () => fn(installer.name, (f, ...args) => f.runWith(installer, ...args)))
 
-  // A new version updates untouched copies.
+  it('copy install, update, local edits and uninstall', (name, run) => {
+    const f = fixture(`${name}-copy`)
+    let r = run(f, '--setup', 'claude')
+    assert.equal(r.code, 0, r.out)
+    assert.ok(lstatSync(f.home('.claude/skills/s1')).isDirectory())
+    assert.equal(readFileSync(f.home('.claude/skills/s1/scripts/run.mjs'), 'utf8'), 'run')
+    assert.equal(f.state().mode, 'copy')
+    assert.deepEqual(f.state().harnesses, ['claude'])
+    assert.equal(run(f, '--check').code, 0)
+
+    // A new version updates untouched copies.
+    f.put('plugins/core/skills/s1/SKILL.md', 'skill v2')
+    assert.equal(run(f, '--check').code, 1)
+    assert.equal(run(f).code, 0)
+    assert.equal(readFileSync(f.home('.claude/skills/s1/SKILL.md'), 'utf8'), 'skill v2')
+
+    // A copy edited by the user is not overwritten without --force.
+    writeFileSync(f.home('.claude/agents/a1.md'), 'my notes')
+    f.put('plugins/core/agents/a1.md', 'agent v2')
+    r = run(f)
+    assert.equal(r.code, 1)
+    assert.match(r.out, /edited since it was installed/)
+    assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'my notes')
+    assert.equal(run(f, '--force').code, 0)
+    assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'agent v2')
+
+    // A deleted asset is removed; an unrelated file in the same folder is left alone.
+    writeFileSync(f.home('.claude/agents/mine.md'), 'mine')
+    rmSync(join(f.repo, 'plugins/core/agents/a1.md'))
+    assert.equal(run(f).code, 0)
+    assert.ok(!existsSync(f.home('.claude/agents/a1.md')))
+    assert.ok(existsSync(f.home('.claude/agents/mine.md')))
+
+    assert.equal(run(f, '--remove').code, 0)
+    assert.ok(!existsSync(f.home('.claude/skills/s1')))
+    assert.ok(existsSync(f.home('.claude/agents/mine.md')))
+    assert.ok(!existsSync(f.home('.agent-toolkit/acme-kit.json')))
+  })
+
+  it('a file the installer did not create is never overwritten, unless identical', (name, run) => {
+    const f = fixture(`${name}-foreign`)
+    mkdirSync(f.home('.claude/agents'), { recursive: true })
+    writeFileSync(f.home('.claude/agents/a1.md'), 'someone else')
+    let r = run(f, '--setup', 'claude')
+    assert.equal(r.code, 1)
+    assert.match(r.out, /did not create/)
+    assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'someone else')
+
+    writeFileSync(f.home('.claude/agents/a1.md'), 'agent v1')
+    r = run(f)
+    assert.equal(r.code, 0, r.out)
+    assert.match(r.out, /now tracked/)
+  })
+
+  it('switching between copy and link mode replaces what was installed', (name, run) => {
+    const f = fixture(`${name}-modes`)
+    assert.equal(run(f, '--setup', 'claude').code, 0)
+    let r = run(f, '--link')
+    assert.equal(r.code, 0, r.out)
+    assert.ok(lstatSync(f.home('.claude/skills/s1')).isSymbolicLink())
+    assert.equal(f.state().mode, 'link')
+    assert.deepEqual(f.state().copies, {})
+    assert.equal(run(f, '--check').code, 0)
+
+    // Deselecting a harness removes its links.
+    assert.equal(run(f, '--setup', 'opencode').code, 0)
+    assert.ok(!existsSync(f.home('.claude/skills/s1')))
+
+    r = run(f, '--setup', 'claude', '--copy')
+    assert.equal(r.code, 0, r.out)
+    assert.ok(lstatSync(f.home('.claude/skills/s1')).isDirectory())
+    assert.equal(run(f, '--check').code, 0)
+  })
+}
+
+test('both installers share one installation', { skip: skipPs }, () => {
+  const [node, ps] = installers
+  const f = fixture('shared')
+  assert.equal(f.runWith(node, '--setup', 'claude').code, 0)
+  let r = f.runWith(ps, '--check')
+  assert.equal(r.code, 0, r.out)
+
   f.put('plugins/core/skills/s1/SKILL.md', 'skill v2')
-  assert.equal(f.run('--check').code, 1)
-  assert.equal(f.run().code, 0)
-  assert.equal(readFileSync(f.home('.claude/skills/s1/SKILL.md'), 'utf8'), 'skill v2')
+  assert.equal(f.runWith(ps).code, 0)
+  r = f.runWith(node, '--check')
+  assert.equal(r.code, 0, r.out)
 
-  // A copy edited by the user is not overwritten without --force.
-  writeFileSync(f.home('.claude/agents/a1.md'), 'my notes')
-  f.put('plugins/core/agents/a1.md', 'agent v2')
-  r = f.run()
-  assert.equal(r.code, 1)
-  assert.match(r.out, /edited since it was installed/)
-  assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'my notes')
-  assert.equal(f.run('--force').code, 0)
-  assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'agent v2')
-
-  // A deleted asset is removed; an unrelated file in the same folder is left alone.
-  writeFileSync(f.home('.claude/agents/mine.md'), 'mine')
-  rmSync(join(f.repo, 'plugins/core/agents/a1.md'))
-  assert.equal(f.run().code, 0)
-  assert.ok(!existsSync(f.home('.claude/agents/a1.md')))
-  assert.ok(existsSync(f.home('.claude/agents/mine.md')))
-
-  assert.equal(f.run('--remove').code, 0)
+  assert.equal(f.runWith(ps, '--remove').code, 0)
   assert.ok(!existsSync(f.home('.claude/skills/s1')))
-  assert.ok(existsSync(f.home('.claude/agents/mine.md')))
-  assert.ok(!existsSync(f.home('.agent-toolkit/acme-kit.json')))
 })
 
-test('a file the installer did not create is never overwritten, unless identical', () => {
-  const f = fixture('foreign')
-  mkdirSync(f.home('.claude/agents'), { recursive: true })
-  writeFileSync(f.home('.claude/agents/a1.md'), 'someone else')
-  let r = f.run('--setup', 'claude')
-  assert.equal(r.code, 1)
-  assert.match(r.out, /did not create/)
-  assert.equal(readFileSync(f.home('.claude/agents/a1.md'), 'utf8'), 'someone else')
-
-  writeFileSync(f.home('.claude/agents/a1.md'), 'agent v1')
-  r = f.run()
-  assert.equal(r.code, 0, r.out)
-  assert.match(r.out, /now tracked/)
-})
-
-test('switching between copy and link mode replaces what was installed', () => {
-  const f = fixture('modes')
-  assert.equal(f.run('--setup', 'claude').code, 0)
-  let r = f.run('--link')
-  assert.equal(r.code, 0, r.out)
-  assert.ok(lstatSync(f.home('.claude/skills/s1')).isSymbolicLink())
-  assert.equal(f.state().mode, 'link')
-  assert.deepEqual(f.state().copies, {})
-
-  // Deselecting a harness removes its links.
-  assert.equal(f.run('--setup', 'opencode').code, 0)
-  assert.ok(!existsSync(f.home('.claude/skills/s1')))
-
-  assert.equal(f.run('--setup', 'claude', '--copy').code, 0)
-  assert.ok(lstatSync(f.home('.claude/skills/s1')).isDirectory())
-  assert.equal(f.run('--check').code, 0)
+test('install-assets.ps1 is ASCII without a BOM (Windows PowerShell 5.1 reads it in the ANSI code page)', () => {
+  const bytes = readFileSync(ps1)
+  assert.ok(bytes.every((b) => b < 0x80), 'non-ASCII byte in install-assets.ps1')
 })

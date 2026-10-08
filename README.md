@@ -36,7 +36,7 @@ dist/                             生成物 — コピーして使う配布物
   opencode/{agent,command}/
   copilot/{skills,prompts,agents}/
 scripts/                          ビルド、検証、インストーラ
-install.bat                       Windows 用のインストーラ(scripts/install-assets.mjs を呼ぶ)
+install.bat                       Windows 用のインストーラ(scripts/install-assets.ps1 を呼ぶ。Node.js 不要)
 tests/                            スキルに同梱するスクリプトの単体テスト
 toolkit.config.json               リポジトリごとのビルド設定
 docs/                             ハーネスごとのメモ
@@ -73,22 +73,25 @@ docs/                             ハーネスごとのメモ
 
 ### インストーラ(ユーザー単位にコピー)
 
-生成物を各ツールがユーザー単位で読むフォルダにコピーする。管理者権限も Windows の開発者モードも
-要らず、コピーが終わればダウンロードしたフォルダは消してよい。必要なのは Node.js 20 以上だけ
-(`npm ci` は不要)。
+生成物を各ツールがユーザー単位で読むフォルダにコピーする。管理者権限も開発者モードも要らず、
+コピーが終わればダウンロードしたフォルダは消してよい。
+
+| OS | 実行するもの | 必要なもの |
+| --- | --- | --- |
+| Windows 10 / 11 | `install.bat`(中身は `scripts/install-assets.ps1`) | なし(Windows に入っている PowerShell 5.1 で動く) |
+| macOS / Linux | `node scripts/install-assets.mjs` | Node.js 20 以上(`npm ci` は不要) |
 
 1. [リリース](https://github.com/noxitro/agent-toolkit/releases)の「Source code (zip)」をダウンロード
-   して展開する(または `git clone`)。
-2. **Windows**:展開したフォルダの `install.bat` をダブルクリックする。インターネットから落とした
-   ファイルなので、確認の画面が出たら「実行」を選ぶ。Node.js が無ければ入れ方
-   (`winget install OpenJS.NodeJS.LTS`)を表示して止まる。
+   する(または `git clone`)。
+2. **Windows**:展開する**前に** ZIP を右クリック →「プロパティ」→「許可する」にチェック →「OK」。
+   そのあと展開し、`install.bat` をダブルクリックする。
    **macOS / Linux**:展開したフォルダで `node scripts/install-assets.mjs` を実行する。
 3. 初回だけ、どのツール向けに入れるかを番号で聞かれる(例:`1,3`)。
 4. 各ツールで新しいセッションを開くと読み込まれる。
 
 更新は、新しい版をダウンロードして同じように実行するだけ。選んだツールと入れたファイルの記録は
 ダウンロードしたフォルダではなく `~/.agent-toolkit/` にあるので、別の場所に展開した新しい版からでも
-更新・削除できる。
+更新・削除できる。Windows 版と macOS / Linux 版は同じ記録を読み書きする。
 
 | 操作 | Windows | macOS / Linux |
 | --- | --- | --- |
@@ -113,6 +116,14 @@ docs/                             ハーネスごとのメモ
 - Copilot(VS Code / CLI)は `~/.claude/skills/` と `~/.claude/agents/` も読むので、`claude` と `copilot` を
   両方選ぶと、二重に見えないよう Copilot 側のスキルとエージェントは入れない(プロンプトだけ入れる)。
 - Claude Code のプラグインで入れている場合は、先に `/plugin uninstall toolkit-core@agent-toolkit` で外す。
+
+組織で管理されている Windows PC で止まる場合:
+
+- **「スクリプトの実行が無効になっている」「デジタル署名されていない」**:実行ポリシーがグループ
+  ポリシーで固定されている。`install.bat` は今回の実行に限ってポリシーを緩めるが、グループ ポリシーの設定は
+  それより優先される。手順 2 の「許可する」をしてから展開し直しても止まるなら、IT 部門に相談する。
+- **「ConstrainedLanguage mode」と表示される**:AppLocker / WDAC でスクリプトが制限されている。
+  インストーラは動かせないので、IT 部門に相談するか、上の表のコピー先に手でコピーする。
 
 ### リポジトリの `.github/` にコピー(Copilot)
 
@@ -203,16 +214,16 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
-| `npm run assets` | 生成物をユーザー単位の探索場所に入れる・更新する(`-- --setup`・`-- --remove` も可。Windows は `install.bat`) |
+| `npm run assets` | 生成物をユーザー単位の探索場所に入れる・更新する(`-- --setup`・`-- --remove` も可。Windows の利用者向けは `install.bat`) |
 | `npm run assets:check` | 入っている資産の状態を確かめる。欠落・古い版・不要なものがあれば失敗 |
 | `npm run links` | `assets` をリンクモードで実行する(開発者向け) |
-| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
+| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト)と、Node 版・PowerShell 版インストーラの同じシナリオでの検査。Python や PowerShell が PATH に無ければその分はスキップ(PowerShell の場所は環境変数 `PWSH` でも指定できる) |
 
 ## CI
 
 | ワークフロー | 契機 | 強制する内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint |
+| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト |
 | [`link-check.yml`](.github/workflows/link-check.yml) | Markdown を触る PR、毎週 | lychee によるリンク検査。定期実行で失敗したときは run を落とさず issue を開く |
 | [`release.yml`](.github/workflows/release.yml) | タグ `v*` | タグが `package.json` と一致すること、`npm run check` 全体、`opencode.zip` / `copilot.zip` 付きのリリース発行 |
 

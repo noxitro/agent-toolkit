@@ -46,6 +46,21 @@ jobs:
       - name: Test skill scripts
         run: npm test
 
+  # The Windows installer (install.bat -> scripts/install-assets.ps1) must run on the Windows
+  # PowerShell 5.1 that every Windows PC has, not only on the pwsh 7 the Linux job uses.
+  installer-windows:
+    name: Installer on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test the Node and PowerShell installers
+        run: node --test tests/install-assets.test.mjs
+
   markdown:
     name: Markdown lint
     runs-on: ubuntu-latest

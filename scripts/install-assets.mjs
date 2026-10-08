@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Install this repository's generated skills, commands and agents into the per-user folders
-// that Claude Code, OpenCode and GitHub Copilot read. Windows users run install.bat instead.
+// that Claude Code, OpenCode and GitHub Copilot read. On Windows, install.bat runs the
+// PowerShell port (scripts/install-assets.ps1) instead, so no Node.js is needed there; the two
+// share scripts/install-presets.json and the state file, and must behave the same.
 //
 //   node scripts/install-assets.mjs                  install or update (the first run asks which
 //                                                    harnesses to install for)
@@ -34,12 +36,12 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, r
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
-import { HARNESSES, allPresetDirs, isInside, normalize, presetEntries, staleLinks, treeHash } from './lib/presets.mjs'
+import { HARNESSES, allPresetDirs, harnessInfo, normalize, presetEntries, staleLinks, treeHash } from './lib/presets.mjs'
 
 // Read here rather than from lib/toolkit.mjs, which needs the yaml package: the installer
 // must run from a downloaded ZIP without `npm ci`. Same rules as lib/toolkit.mjs.
 const ROOT = process.env.AGENT_TOOLKIT_ROOT ? resolve(process.env.AGENT_TOOLKIT_ROOT) : process.cwd()
-const readJson = (p) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {})
+const readJson = (p) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8').replace(/^\uFEFF/, '')) : {})
 const config = readJson(join(ROOT, 'toolkit.config.json'))
 const pkg = readJson(join(ROOT, 'package.json'))
 const CLAUDE_PLUGIN = config.claudePlugin ?? 'toolkit-core'
@@ -96,9 +98,10 @@ async function askHarnesses() {
     process.exit(1)
   }
   console.log('Which tools should the assets be installed for?')
-  console.log('  1) claude    Claude Code     ~/.claude/{skills,commands,agents}')
-  console.log('  2) opencode  OpenCode        ~/.config/opencode/{commands,agents}')
-  console.log('  3) copilot   GitHub Copilot  ~/.copilot/{skills,agents}, VS Code user prompts')
+  HARNESSES.forEach((h, i) => {
+    const { label, summary } = harnessInfo(h)
+    console.log(`  ${i + 1}) ${h.padEnd(9)} ${label.padEnd(15)} ${summary}`)
+  })
   const rl = createInterface({ input: process.stdin, output: process.stdout })
   try {
     for (;;) {
