@@ -1,0 +1,31 @@
+{
+  "$comment": "Where each harness reads per-user assets, shared by scripts/install-assets.mjs and scripts/install-assets.ps1. `from` is a generated folder in the repository, `to` the per-user folder; every entry of `from` is installed into `to`. Variables: {home}, {xdgConfig} (XDG_CONFIG_HOME, else {home}/.config, also on Windows), {vscodeUser} (VS Code user data, default profile), {claudePlugin}. `skipIfSelected`: Copilot also reads ~/.claude/skills and ~/.claude/agents, so with claude selected the copilot copies would show up twice. Checked 2026-10; see docs/harness-notes.md.",
+  "harnesses": {
+    "claude": {
+      "label": "Claude Code",
+      "summary": "~/.claude/{skills,commands,agents}",
+      "entries": [
+        { "from": "plugins/{claudePlugin}/skills", "to": "{home}/.claude/skills" },
+        { "from": "plugins/{claudePlugin}/commands", "to": "{home}/.claude/commands" },
+        { "from": "plugins/{claudePlugin}/agents", "to": "{home}/.claude/agents" }
+      ]
+    },
+    "opencode": {
+      "label": "OpenCode",
+      "summary": "~/.config/opencode/{commands,agents}",
+      "entries": [
+        { "from": "dist/opencode/command", "to": "{xdgConfig}/opencode/commands" },
+        { "from": "dist/opencode/agent", "to": "{xdgConfig}/opencode/agents" }
+      ]
+    },
+    "copilot": {
+      "label": "GitHub Copilot",
+      "summary": "~/.copilot/{skills,agents}, VS Code user prompts",
+      "entries": [
+        { "from": "dist/copilot/skills", "to": "{home}/.copilot/skills", "skipIfSelected": "claude" },
+        { "from": "dist/copilot/agents", "to": "{home}/.copilot/agents", "skipIfSelected": "claude" },
+        { "from": "dist/copilot/prompts", "to": "{vscodeUser}/prompts" }
+      ]
+    }
+  }
+}

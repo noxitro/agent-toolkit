@@ -35,7 +35,8 @@ plugins/toolkit-core/             生成物 — Claude Code プラグインの�
 dist/                             生成物 — コピーして使う配布物
   opencode/{agent,command}/
   copilot/{skills,prompts,agents}/
-scripts/                          ビルドと検証
+scripts/                          ビルド、検証、インストーラ
+install.bat                       Windows 用のインストーラ(scripts/install-assets.ps1 を呼ぶ。Node.js 不要)
 tests/                            スキルに同梱するスクリプトの単体テスト
 toolkit.config.json               リポジトリごとのビルド設定
 docs/                             ハーネスごとのメモ
@@ -50,7 +51,17 @@ docs/                             ハーネスごとのメモ
 
 ## 導入
 
-### Claude Code
+どの方法も、入るのは同じ生成物。1 台の PC ではどれか 1 つにする(重ねると同じ資産が二重に
+読み込まれる)。
+
+| 使い方 | おすすめの方法 |
+| --- | --- |
+| Claude Code だけ使う | [プラグイン](#claude-code-のプラグイン)。権限不要で、更新も `/plugin` から |
+| OpenCode / Copilot も使う、またはプラグインを使わない | [インストーラ](#インストーラユーザー単位にコピー)でユーザー単位のフォルダにコピー |
+| 1 つのリポジトリのメンバー全員に Copilot 用の資産を配る | [そのリポジトリの `.github/` にコピー](#リポジトリの-github-にコピーcopilot) |
+| このリポジトリで資産を開発している | [インストーラのリンクモード](#開発者向けリンクモード) |
+
+### Claude Code のプラグイン
 
 ```bash
 /plugin marketplace add noxitro/agent-toolkit
@@ -60,40 +71,88 @@ docs/                             ハーネスごとのメモ
 /plugin install toolkit-core@agent-toolkit
 ```
 
-### OpenCode
+### インストーラ(ユーザー単位にコピー)
 
-配布物をグローバル設定ディレクトリ(全プロジェクト)か、1 つのプロジェクトの `.opencode/` に
-コピーする。OpenCode はそこから `agent/` と `command/` の両方を読む。
+生成物を各ツールがユーザー単位で読むフォルダにコピーする。管理者権限も開発者モードも要らず、
+コピーが終わればダウンロードしたフォルダは消してよい。
 
-```bash
-cp -r dist/opencode/. ~/.config/opencode/
-```
+| OS | 実行するもの | 必要なもの |
+| --- | --- | --- |
+| Windows 10 / 11 | `install.bat`(中身は `scripts/install-assets.ps1`) | なし(Windows に入っている PowerShell 5.1 で動く) |
+| macOS / Linux | `node scripts/install-assets.mjs` | Node.js 20 以上(`npm ci` は不要) |
 
-### GitHub Copilot(VS Code / CLI)
+1. [リリース](https://github.com/noxitro/agent-toolkit/releases)の「Source code (zip)」をダウンロード
+   する(または `git clone`)。
+2. **Windows**:展開する**前に** ZIP を右クリック →「プロパティ」→「許可する」にチェック →「OK」。
+   そのあと展開し、`install.bat` をダブルクリックする。
+   **macOS / Linux**:展開したフォルダで `node scripts/install-assets.mjs` を実行する。
+3. 初回だけ、どのツール向けに入れるかを番号で聞かれる(例:`1,3`)。
+4. 各ツールで新しいセッションを開くと読み込まれる。
 
-使いたいリポジトリに配布物をコピーする。
+更新は、新しい版をダウンロードして同じように実行するだけ。選んだツールと入れたファイルの記録は
+ダウンロードしたフォルダではなく `~/.agent-toolkit/` にあるので、別の場所に展開した新しい版からでも
+更新・削除できる。Windows 版と macOS / Linux 版は同じ記録を読み書きする。
+
+| 操作 | Windows | macOS / Linux |
+| --- | --- | --- |
+| 入れる・更新する | `install.bat` | `node scripts/install-assets.mjs` |
+| ツールを選び直す | `install.bat --setup` | `node scripts/install-assets.mjs --setup claude,copilot` |
+| 状態を確かめる(何も変えない) | `install.bat --check` | `node scripts/install-assets.mjs --check` |
+| アンインストール | `install.bat --remove` | `node scripts/install-assets.mjs --remove` |
+
+| ツール | コピー先 |
+| --- | --- |
+| `claude` | `~/.claude/skills/`、`~/.claude/commands/`、`~/.claude/agents/` |
+| `opencode` | `~/.config/opencode/commands/`、`~/.config/opencode/agents/` |
+| `copilot` | `~/.copilot/skills/`、`~/.copilot/agents/`、VS Code のユーザー プロンプト フォルダ(既定プロファイル) |
+
+安全側の決まり:
+
+- **自分で置いたものは上書きしない。** インストーラが入れていないファイル、入れたあとに編集された
+  ファイルは、上書きも削除もせずに知らせる(`--force` を付けたときだけ上書きする)。中身がこの版と
+  同じなら、そのまま管理下に入れる。
+- **要らなくなったものは消す。** 新しい版で無くなった資産や、選択から外したツールの資産は、
+  インストーラが入れて未編集のものだけ削除する。
+- Copilot(VS Code / CLI)は `~/.claude/skills/` と `~/.claude/agents/` も読むので、`claude` と `copilot` を
+  両方選ぶと、二重に見えないよう Copilot 側のスキルとエージェントは入れない(プロンプトだけ入れる)。
+- Claude Code のプラグインで入れている場合は、先に `/plugin uninstall toolkit-core@agent-toolkit` で外す。
+
+組織で管理されている Windows PC で止まる場合:
+
+- **「スクリプトの実行が無効になっている」「デジタル署名されていない」**:実行ポリシーがグループ
+  ポリシーで固定されている。`install.bat` は今回の実行に限ってポリシーを緩めるが、グループ ポリシーの設定は
+  それより優先される。手順 2 の「許可する」をしてから展開し直しても止まるなら、IT 部門に相談する。
+- **「ConstrainedLanguage mode」と表示される**:AppLocker / WDAC でスクリプトが制限されている。
+  インストーラは動かせないので、IT 部門に相談するか、上の表のコピー先に手でコピーする。
+
+### リポジトリの `.github/` にコピー(Copilot)
+
+1 つのリポジトリで、そのメンバー全員に使わせたい場合は、そのリポジトリに配布物をコピーして
+コミットする。Visual Studio 2026 ではこれが公式の経路。
 
 ```bash
 cp -r dist/copilot/. .github/
 ```
 
-1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
-場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
+### 開発者向け:リンクモード
 
-### このクローンからシンボリックリンクで導入(開発中の自分用)
-
-コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクをユーザーレベルの探索場所に張ると、
-`npm run build` の結果がそのまま全セッションに反映される。張るリンクはこのマシン用の
-`toolkit.local.json`(git に入らない)の `links` に書く。`toolkit.local.example.json` をコピーして始める
-(`path` は `~` 始まり可、`target` はリポジトリからの相対)。全員に張りたいリンクだけを `toolkit.config.json` の `links` に書く。
+このリポジトリで資産を開発しているなら、コピーの代わりにこのクローンへのシンボリックリンクを
+張れる。`npm run build` や `git pull` の結果がそのまま全セッションに反映される。
 
 ```bash
-npm run links
+npm run links                    # = node scripts/install-assets.mjs --link
+npm run assets -- --copy         # コピーに戻す
+npm run assets:check
 ```
 
-`npm run links:check` で張られているかを確かめられる。Windows では開発者モードが要る。リンクは
-絶対パスで張られるので、クローンを移動したら張り直す。同じ資産をプラグインでも導入すると二重に
-読み込まれるので、どちらか一方にする。
+Windows では `install.bat --link`。シンボリックリンクの作成には**開発者モード**(または管理者として
+実行)が要り、無効なら設定画面を開く。開発者モードは PC 全体の設定で、組織の管理下の PC では有効に
+できないことが多いので、利用者への配布にはコピーを使う。リンクは絶対パスで張られるので、クローンを
+移動したらもう一度実行する。
+
+プリセットで足りない場所は `toolkit.local.json`(git に入らない)の `links` に個別に書く(`path` は
+`~` 始まり可、`target` はリポジトリからの相対)。選んだモードで入る。全員に入れたいものだけを
+`toolkit.config.json` の `links` に書く。書式は `toolkit.local.example.json` を参照。
 
 ## 資産の書き方
 
@@ -155,13 +214,16 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
-| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
+| `npm run assets` | 生成物をユーザー単位の探索場所に入れる・更新する(`-- --setup`・`-- --remove` も可。Windows の利用者向けは `install.bat`) |
+| `npm run assets:check` | 入っている資産の状態を確かめる。欠落・古い版・不要なものがあれば失敗 |
+| `npm run links` | `assets` をリンクモードで実行する(開発者向け) |
+| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト)と、Node 版・PowerShell 版インストーラの同じシナリオでの検査。Python や PowerShell が PATH に無ければその分はスキップ(PowerShell の場所は環境変数 `PWSH` でも指定できる) |
 
 ## CI
 
 | ワークフロー | 契機 | 強制する内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint |
+| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト |
 | [`link-check.yml`](.github/workflows/link-check.yml) | Markdown を触る PR、毎週 | lychee によるリンク検査。定期実行で失敗したときは run を落とさず issue を開く |
 | [`release.yml`](.github/workflows/release.yml) | タグ `v*` | タグが `package.json` と一致すること、`npm run check` 全体、`opencode.zip` / `copilot.zip` 付きのリリース発行 |
 
