@@ -1,7 +1,7 @@
 // The production export of m365-skill-pack: a standalone repository that holds only the
 // skill, as a Claude Code plugin (with its own one-plugin marketplace) and as a GitHub
-// Copilot skill directory. Nothing else from this repository goes in - no test tooling
-// (tools/m365-emu), no opencode output, no GitHub workflows - because adding a Claude Code
+// Copilot skill directory. Nothing else from this repository goes in - no other assets, no
+// test tooling, no OpenCode output, no GitHub workflows - because adding a Claude Code
 // marketplace puts the whole marketplace repository on the machine, not just one plugin.
 //
 // Every exported file is scanned before anything is written: names of third-party model
