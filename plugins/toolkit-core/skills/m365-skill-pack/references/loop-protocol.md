@@ -172,7 +172,6 @@ script --input bundle--> A --CONTINUE + out bundle--> script --out bundle--> B
    +-- A: PASS (done) / CONTINUE (fixed, review again) <-- review bundle ---+
 ```
 
-
 ### Status line
 
 The first line of every agent reply is the status line. The script reads only this line
