@@ -35,7 +35,8 @@ plugins/toolkit-core/             生成物 — Claude Code プラグインの�
 dist/                             生成物 — コピーして使う配布物
   opencode/{agent,command}/
   copilot/{skills,prompts,agents}/
-scripts/                          ビルドと検証
+scripts/                          ビルドと検証、リンクの導入
+install-links.bat                 Windows 用のリンク導入(scripts/install-links.mjs を呼ぶ)
 tests/                            スキルに同梱するスクリプトの単体テスト
 toolkit.config.json               リポジトリごとのビルド設定
 docs/                             ハーネスごとのメモ
@@ -80,20 +81,52 @@ cp -r dist/copilot/. .github/
 1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
 場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
 
-### このクローンからシンボリックリンクで導入(開発中の自分用)
+### このクローンからシンボリックリンクで導入(開発中の自分用・おすすめ)
 
-コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクをユーザーレベルの探索場所に張ると、
-`npm run build` の結果がそのまま全セッションに反映される。張るリンクはこのマシン用の
-`toolkit.local.json`(git に入らない)の `links` に書く。`toolkit.local.example.json` をコピーして始める
-(`path` は `~` 始まり可、`target` はリポジトリからの相対)。全員に張りたいリンクだけを `toolkit.config.json` の `links` に書く。
+コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクを各ハーネスのユーザー単位の
+探索場所に張る。`npm run build` の結果がそのまま全セッションに反映され、`git pull` だけで更新が届く。
 
-```bash
-npm run links
+**Windows** はリポジトリ直下の `install-links.bat` をダブルクリックする(またはターミナルで実行)。
+Node.js 20 以上、開発者モード、npm の依存を確かめてから、初回だけどのハーネスに張るかを聞く。
+開発者モードが無効なら設定画面を開くので、オンにしてもう一度実行する。
+
+```bat
+install-links.bat            :: 初回は対象を選んで張る。2 回目以降は張り直し・修復
+install-links.bat --setup    :: 対象ハーネスを選び直す
+install-links.bat --check    :: 状態の確認だけ(何も変えない)
+install-links.bat --remove   :: このクローンが張ったリンクをすべて外す
 ```
 
-`npm run links:check` で張られているかを確かめられる。Windows では開発者モードが要る。リンクは
-絶対パスで張られるので、クローンを移動したら張り直す。同じ資産をプラグインでも導入すると二重に
-読み込まれるので、どちらか一方にする。
+**macOS / Linux**(Windows のターミナルからも可)は同じことを npm で行う。
+
+```bash
+npm ci
+npm run links                          # 初回は対象を聞かれる
+npm run links -- --setup claude,copilot  # 非対話で選ぶ
+npm run links:check
+npm run links -- --remove
+```
+
+選んだハーネスは `toolkit.local.json`(git に入らない)の `harnesses` に保存され、実行のたびに
+生成物から張るリンクを数え直す。資産を増やしたら `npm run build` のあとにもう一度実行すれば
+リンクが増え、消した資産や選択を外したハーネスのリンク(このクローンを指すものだけ)は外れる。
+
+| ハーネス | リンク先 |
+| --- | --- |
+| `claude` | `~/.claude/skills/`、`~/.claude/commands/`、`~/.claude/agents/` |
+| `opencode` | `~/.config/opencode/commands/`、`~/.config/opencode/agents/` |
+| `copilot` | `~/.copilot/skills/`、`~/.copilot/agents/`、VS Code のユーザー プロンプト フォルダ(既定プロファイル) |
+
+Copilot(VS Code / CLI)は `~/.claude/skills/` と `~/.claude/agents/` も読むので、`claude` と `copilot` を
+両方選ぶと、二重に見えないよう Copilot 側のスキルとエージェントは張らない(プロンプトだけ張る)。
+
+プリセットで足りない場所は `toolkit.local.json` の `links` に個別に書く(`path` は `~` 始まり可、
+`target` はリポジトリからの相対)。全員に張りたいリンクだけを `toolkit.config.json` の `links` に書く。
+書式は `toolkit.local.example.json` を参照。
+
+リンクは絶対パスで張られるので、クローンを移動したら張り直す。同じ資産をプラグインやコピーでも
+導入すると二重に読み込まれるので、どれか 1 つにする(プラグインから移るときは
+`/plugin uninstall toolkit-core@agent-toolkit` で外してから張る)。
 
 ## 資産の書き方
 
@@ -155,6 +188,8 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
+| `npm run links` | 生成物へのシンボリックリンクをユーザー単位の探索場所に張る(`-- --setup`・`-- --remove` も可。Windows は `install-links.bat`) |
+| `npm run links:check` | リンクの状態を確かめる。欠落・誤り・不要なリンクがあれば失敗 |
 | `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
 
 ## CI

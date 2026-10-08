@@ -1,8 +1,4 @@
 {
-  "links": [
-    {
-      "path": "~/.claude/skills/m365-skill-pack",
-      "target": "plugins/toolkit-core/skills/m365-skill-pack"
-    }
-  ]
+  "harnesses": ["claude"],
+  "links": []
 }

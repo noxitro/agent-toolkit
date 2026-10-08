@@ -40,6 +40,9 @@
 - プロジェクト外のパスは `external_directory` 権限で制御され、既定は `ask`。非対話の `opencode run`
   はこれを自動で拒否する。プロジェクト外の絶対パスを読む資産は、「指示を無視している」ように
   見えて、実際には遮断されている。
+- 公式文書の置き場は複数形の `agents/`・`commands/`(2026-10 時点)。`npm run links` は複数形の
+  側に張る。配布物は単数形の `agent/`・`command/` のままなので、コピーで導入して読まれない版では
+  複数形に名前を変える。
 - Windows では npm が `opencode` を PowerShell のシムとして入れる。実行ファイルが必要な
   ランチャーは `%APPDATA%\npm\opencode.cmd` を使う。
 
@@ -50,8 +53,8 @@
 | 資産 | リポジトリ内の置き場 | ユーザーレベルの置き場 |
 | --- | --- | --- |
 | スキル | `.github/skills/<name>/SKILL.md` | `~/.copilot/skills/`、`~/.claude/skills/`、`~/.agents/skills/` |
-| プロンプト | `.github/prompts/<name>.prompt.md` | VS Code: `%APPDATA%\Code\User\prompts\` |
-| エージェント | `.github/agents/<name>.agent.md` | `%USERPROFILE%\.github\agents\` |
+| プロンプト | `.github/prompts/<name>.prompt.md` | VS Code のプロファイルのユーザーデータ(既定プロファイルは Windows: `%APPDATA%\Code\User\prompts\`) |
+| エージェント | `.github/agents/<name>.agent.md` | `~/.copilot/agents/`、`~/.claude/agents/` |
 
 **メモ。**
 
