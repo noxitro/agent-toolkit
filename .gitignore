@@ -6,3 +6,6 @@ lychee/
 
 # m365-emu run results (tools/m365-emu/README.md)
 tools/m365-emu/results/
+
+# per-machine install links (scripts/install-links.mjs; copy toolkit.local.example.json)
+toolkit.local.json

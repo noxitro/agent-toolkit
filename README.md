@@ -83,8 +83,9 @@ cp -r dist/copilot/. .github/
 ### このクローンからシンボリックリンクで導入(開発中の自分用)
 
 コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクをユーザーレベルの探索場所に張ると、
-`npm run build` の結果がそのまま全セッションに反映される。張るリンクは `toolkit.config.json` の
-`links` に書く(`path` は `~` 始まり可、`target` はリポジトリからの相対)。
+`npm run build` の結果がそのまま全セッションに反映される。張るリンクはこのマシン用の
+`toolkit.local.json`(git に入らない)の `links` に書く。`toolkit.local.example.json` をコピーして始める
+(`path` は `~` 始まり可、`target` はリポジトリからの相対)。全員に張りたいリンクだけを `toolkit.config.json` の `links` に書く。
 
 ```bash
 npm run links
@@ -155,7 +156,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
 | `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト、`m365-emu` の一巡。Python が PATH に無ければ Python のテストはスキップ) |
-| `node tools/m365-emu/run.mjs` | `m365-skill-pack` の Microsoft 365 側を opencode と無料モデルで模擬し、練習用フィクスチャで一巡させて採点する(ダブルクリックなら `tools/m365-emu/m365-emu.bat`)。手引きは [tools/m365-emu/README.md](tools/m365-emu/README.md) |
+| `node tools/m365-emu/run.mjs` | `m365-skill-pack` の Microsoft 365 側を模擬し、練習用フィクスチャで一巡させて採点する。エージェント役は opencode と無料モデル(既定、`m365-emu.bat`)か、人が Microsoft 365 Copilot に手で運ぶ手動ドライバ(`--driver manual`、`m365-emu-manual.bat`)。手動ドライバでは、スクリプトが実装セッションとレビューセッションの間を回す外部ループ(`--loop external`、`m365-emu-loop.bat`)も使える。手引きは [tools/m365-emu/README.md](tools/m365-emu/README.md) |
 
 ## CI
 

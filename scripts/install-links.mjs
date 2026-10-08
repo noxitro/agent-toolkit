@@ -5,7 +5,8 @@
 //   node scripts/install-links.mjs           create or repair every link
 //   node scripts/install-links.mjs --check   report state, exit 1 if any link is missing/wrong
 //
-// Links are declared in toolkit.config.json:
+// Links are declared under "links" in toolkit.config.json (shared, committed) and in
+// toolkit.local.json (this machine only, git-ignored; see toolkit.local.example.json):
 //   "links": [{ "path": "~/.agents/skills/wiki-query", "target": "plugins/llm-wiki/skills/wiki-query" }]
 // `path` may start with "~" (home directory); `target` is relative to the repository root.
 // Targets are resolved to absolute paths, so moving the repository means re-running this.
@@ -20,12 +21,14 @@ import { ROOT } from './lib/toolkit.mjs'
 
 const check = process.argv.includes('--check')
 
-const configPath = join(ROOT, 'toolkit.config.json')
-const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {}
-const links = config.links ?? []
+function readLinks(name) {
+  const p = join(ROOT, name)
+  return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')).links ?? [] : []
+}
+const links = [...readLinks('toolkit.config.json'), ...readLinks('toolkit.local.json')]
 
 if (links.length === 0) {
-  console.log('No links declared in toolkit.config.json - nothing to do.')
+  console.log('No links declared in toolkit.config.json or toolkit.local.json - nothing to do.')
   process.exit(0)
 }
 
