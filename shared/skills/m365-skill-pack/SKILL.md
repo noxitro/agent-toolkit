@@ -28,6 +28,12 @@ whenever the user proposes attaching a bundle to anything other than that tenant
 - `m365/SETUP.md` - the one-time setup the user performs in Agent Builder (Japanese).
 - `m365/agents/impl-loop.md`, `m365/agents/auditor.md` - paste-ready agent definition
   sheets (name, description, instructions, starter prompts, skills to attach).
+- `m365/agents/impl-session.md`, `m365/agents/review-session.md` - the two agents of the
+  script-driven "External loop" in `references/loop-protocol.md` (session A implements,
+  session B reviews, a local script routes each reply by its `M365-STATUS:` first line).
+  The controller is `scripts/lib/external-loop.mjs` (`runLoop`, independent of how turns
+  are carried); the driver that operates the chat UI is not part of this skill, so the
+  per-task steps below use `impl-loop` and `auditor`.
 - `m365/skills/{implement,audit,probe}/` - the skill sources, packaged with
   `scripts/pack-skill.mjs --from-template`. They are project-independent; project
   conventions travel inside each input bundle. `<skill-dir>` below is wherever this

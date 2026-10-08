@@ -392,7 +392,8 @@ test('probe_env.py runs and reports python_version', (t) => {
     assert.match(text, /python_version: /)
     assert.match(text, /== import matrix ==/)
     assert.match(text, /PASS json/)
-    assert.match(text, /== network ==\nnetwork: /)
+    // The probe never tries a network connection (it would trip workplace monitoring).
+    assert.doesNotMatch(text, /== network ==/)
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

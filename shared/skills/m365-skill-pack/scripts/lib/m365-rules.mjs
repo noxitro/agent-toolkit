@@ -53,6 +53,9 @@ export const INPUT_EXCLUDES = [
   '.env', '.env.*', '**/.env', '**/.env.*',
   '*.pem', '**/*.pem', '*.key', '**/*.key', '*.pfx', '**/*.pfx', '*.p12', '**/*.p12', '*.jks', '**/*.jks',
   '**/id_rsa*', '**/id_ed25519*', '**/*.keystore', '**/secrets.*', '**/credentials.*',
+  // credential stores and tool configs that commonly hold tokens
+  '**/.envrc', '**/.ssh/**', '**/.aws/**', '**/.azure/**', '**/.gnupg/**', '**/.npmrc', '**/.pypirc', '**/.netrc',
+  '**/.git-credentials', '**/*.ppk', '**/*.kdbx', '**/*.tfstate', '**/*.tfstate.*', '**/*.publishsettings',
 ]
 
 /** Extensions treated as binary without sniffing. */

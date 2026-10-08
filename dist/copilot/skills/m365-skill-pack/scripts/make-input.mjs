@@ -189,6 +189,9 @@ let dropped = null
 if (drop && existsSync(drop)) {
   dropped = join(drop, basename(outFile))
   copyFileSync(outFile, dropped)
+} else if (drop) {
+  // A typo or an unsynced OneDrive folder must not look like a successful hand-off.
+  console.error(`warning: M365_DROP_DIR ${drop} does not exist; the bundle was not copied there`)
 }
 
 if (opts.quiet) console.log(outFile)

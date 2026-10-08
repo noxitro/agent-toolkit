@@ -1,6 +1,6 @@
 ---
 name: probe
-description: Use when asked to probe, inspect or report the script sandbox environment (Python version, platform, working directory, where attachments are placed, which modules import, whether the network is reachable). Runs scripts/probe_env.py and returns its complete output as a text file.
+description: Use when asked to probe, inspect or report the script sandbox environment (Python version, platform, working directory, where attachments are placed, which modules import). Runs scripts/probe_env.py and returns its complete output as a text file.
 ---
 
 # probe
@@ -11,8 +11,8 @@ changes.
 
 ## How to run
 
-1. Execute `scripts/probe_env.py`. It takes no arguments and never fails on purpose:
-   every section catches its own errors and reports them.
+1. Execute `scripts/probe_env.py`. It never fails on purpose: every section catches its
+   own errors and reports them. The script never opens a network connection.
 2. If a file was attached to the conversation, also run
    `scripts/probe_env.py --out probe-output.txt` after noting where the attachment is
    visible from the script (the report lists candidate directories and any `.zip` or

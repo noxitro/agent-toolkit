@@ -11,3 +11,6 @@ shared/skills/m365-skill-pack/scripts/** text eol=lf
 # With core.autocrlf=true a CRLF checkout breaks them ("set -uo pipefail\r"), e.g.
 # .claude/hooks/session-start.sh, which then fails silently and leaves the git hooks off.
 *.sh text eol=lf
+
+# cmd.exe batch files need CRLF.
+*.bat text eol=crlf
