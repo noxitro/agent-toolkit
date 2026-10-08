@@ -134,6 +134,8 @@ for (const installer of installers) {
     assert.equal(readFileSync(f.home('.claude/skills/s1/scripts/run.mjs'), 'utf8'), 'run')
     assert.equal(f.state().mode, 'copy')
     assert.deepEqual(f.state().harnesses, ['claude'])
+    // Keyed relative to home, so installers that spell the home folder differently agree.
+    assert.deepEqual(Object.keys(f.state().copies).sort(), ['~/.claude/agents/a1.md', '~/.claude/skills/s1'])
     assert.equal(run(f, '--check').code, 0)
 
     // A new version updates untouched copies.

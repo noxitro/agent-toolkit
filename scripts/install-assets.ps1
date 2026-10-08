@@ -23,6 +23,8 @@
 # system code page. It must also stay 5.1-compatible (no ?:, ??, && or -AsHashtable).
 
 $ErrorActionPreference = 'Stop'
+# Copy-Item draws a progress bar per copy in pwsh 7.4+, which flickers over the output.
+$ProgressPreference = 'SilentlyContinue'
 
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
   Write-Host "PowerShell runs in $($ExecutionContext.SessionState.LanguageMode) mode on this PC (an organisation policy), which this installer cannot run in."
@@ -204,11 +206,28 @@ function Save-State {
   [IO.File]::WriteAllText($StateFile, (ConvertTo-Json -InputObject $obj -Depth 5) + "`n", (New-Object Text.UTF8Encoding $false))
 }
 
-# Copies are recorded by absolute path; looked up case-insensitively where the filesystem is.
+# Copies are recorded relative to the home folder ("~/.claude/skills/x", always with "/"), so
+# both installers agree on the key however each spells the home folder (Windows PowerShell 5.1
+# expands 8.3 short names such as RUNNER~1, Node does not). Looked up case-insensitively where
+# the filesystem is.
+function Get-RecordKey([string]$p) {
+  if ($p.StartsWith($UserHome + $sep, [StringComparison]::Ordinal)) {
+    return '~/' + $p.Substring($UserHome.Length + 1).Replace([string]$sep, '/')
+  }
+  return $p
+}
+function Get-RecordPath([string]$k) {
+  if ($k.StartsWith('~/')) { return [IO.Path]::Combine($UserHome, $k.Substring(2).Replace('/', [string]$sep)) }
+  return $k
+}
 function Find-RecordKey([string]$p) {
   $n = Get-Normal $p
-  foreach ($k in @($copies.Keys)) { if ((Get-Normal $k) -ceq $n) { return $k } }
+  foreach ($k in @($copies.Keys)) { if ((Get-Normal (Get-RecordPath $k)) -ceq $n) { return $k } }
   return $null
+}
+function Set-Record([string]$p, [string]$hash) {
+  Remove-Record $p
+  $copies[(Get-RecordKey $p)] = $hash
 }
 function Get-Recorded([string]$p) {
   $k = Find-RecordKey $p
@@ -329,7 +348,7 @@ function New-Installed([string]$src, [string]$dest) {
     }
   } else {
     Copy-Item -LiteralPath $src -Destination $dest -Recurse -Force
-    $copies[$dest] = Get-TreeHash $dest
+    Set-Record $dest (Get-TreeHash $dest)
   }
 }
 
@@ -342,7 +361,7 @@ function Write-Problem([string]$label, [string]$detail) {
 
 # Copies recorded by an earlier run that are no longer selected, plus links into this folder
 # left in any preset folder (asset deleted, harness deselected, switched to copy mode).
-$staleCopies = @(@($copies.Keys) | Where-Object { -not $keep.Contains((Get-Normal $_)) })
+$staleCopies = @(@($copies.Keys) | ForEach-Object { Get-RecordPath $_ } | Where-Object { -not $keep.Contains((Get-Normal $_)) })
 $strayLinks = New-Object System.Collections.Generic.List[object]
 foreach ($dir in (Get-AllPresetDirs)) {
   if (-not [IO.Directory]::Exists($dir)) { continue }
@@ -425,7 +444,7 @@ foreach ($e in $entries) {
   }
   # A hand-made copy identical to ours (e.g. from the old copy instructions) is adopted.
   if (-not $linkMode -and $now.kind -eq 'foreign' -and (Get-TreeHash $e.dest) -eq (Get-TreeHash $e.src)) {
-    if (-not $check) { $copies[$e.dest] = Get-TreeHash $e.dest }
+    if (-not $check) { Set-Record $e.dest (Get-TreeHash $e.dest) }
     Write-Host "  = $label  (already identical; now tracked)"
     continue
   }

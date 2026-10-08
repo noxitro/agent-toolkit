@@ -34,7 +34,7 @@
 
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { HARNESSES, allPresetDirs, harnessInfo, normalize, presetEntries, staleLinks, treeHash } from './lib/presets.mjs'
 
@@ -58,7 +58,7 @@ if (args.includes('--copy') && args.includes('--link')) {
   process.exit(1)
 }
 
-const HOME = homedir()
+const HOME = resolve(homedir())
 const tilde = (p) => (p.startsWith(HOME) ? '~' + p.slice(HOME.length) : p)
 const expandHome = (p) => (p.startsWith('~') ? join(HOME, p.slice(1)) : p)
 
@@ -76,12 +76,21 @@ function saveState() {
   writeFileSync(STATE, JSON.stringify({ mode, harnesses, version: pkg.version, source: ROOT, copies }, null, 2) + '\n')
 }
 
-// Copies are recorded by absolute path; look them up case-insensitively where the filesystem is.
-const recordKey = (p) => Object.keys(state.copies).find((k) => normalize(k) === normalize(p))
+// Copies are recorded relative to the home folder ("~/.claude/skills/x", always with "/"), so
+// both installers agree on the key however each spells the home folder (Windows PowerShell 5.1
+// expands 8.3 short names such as RUNNER~1, Node does not). Looked up case-insensitively where
+// the filesystem is.
+const keyOf = (p) => (p.startsWith(HOME + sep) ? '~/' + p.slice(HOME.length + 1).split(sep).join('/') : p)
+const pathOf = (k) => (k.startsWith('~/') ? join(HOME, ...k.slice(2).split('/')) : k)
+const recordKey = (p) => Object.keys(state.copies).find((k) => normalize(pathOf(k)) === normalize(p))
 const recorded = (p) => state.copies[recordKey(p)]
 function forget(p) {
   const k = recordKey(p)
   if (k) delete state.copies[k]
+}
+function record(p, hash) {
+  forget(p)
+  state.copies[keyOf(p)] = hash
 }
 
 function parseHarnesses(text) {
@@ -166,7 +175,7 @@ function place(src, dest) {
     symlinkSync(src, dest, statSync(src).isDirectory() ? 'dir' : 'file')
   } else {
     cpSync(src, dest, { recursive: true })
-    state.copies[dest] = treeHash(dest)
+    record(dest, treeHash(dest))
   }
 }
 
@@ -178,7 +187,7 @@ const fail = (label, detail) => {
 
 // Copies recorded by an earlier run that are no longer selected, plus links into this clone
 // left in any preset folder (asset deleted, harness deselected, switched to copy mode).
-const staleCopies = Object.keys(state.copies).filter((p) => !keep.has(normalize(p)))
+const staleCopies = Object.keys(state.copies).map(pathOf).filter((p) => !keep.has(normalize(p)))
 const strayLinks = staleLinks(allPresetDirs(env), ROOT, keep)
 
 if (remove) {
@@ -232,7 +241,7 @@ for (const { dest, src, label } of entries) {
   }
   // A hand-made copy identical to ours (e.g. from the old `cp -r` instructions) is adopted.
   if (!linkMode && now.kind === 'foreign' && treeHash(dest) === treeHash(src)) {
-    if (!check) state.copies[dest] = treeHash(dest)
+    if (!check) record(dest, treeHash(dest))
     console.log(`  = ${label}  (already identical; now tracked)`)
     continue
   }
