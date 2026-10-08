@@ -41,7 +41,8 @@ export function parseStatus(reply) {
   const lines = (end === -1 ? all : all.slice(0, end)).map((l) => l.replace(/[*`]/g, '').replace(/^[>#\s]+/, '').trim())
   let position = 'first'
   for (const l of lines) {
-    if (!l) continue
+    // Blank lines and code-fence lines (a chat UI's copy of a code block) do not count.
+    if (!l || /^~{3,}[\w-]*$/.test(l)) continue
     const m = STATUS_RE.exec(l)
     if (m) return { status: m[1].toUpperCase(), token: m[2], round: Number(m[3]), as: m[4].toLowerCase(), position }
     position = 'later'
