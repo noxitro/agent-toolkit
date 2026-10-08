@@ -13,8 +13,9 @@
     "build:check": "node scripts/build.mjs --check",
     "validate": "node scripts/validate.mjs",
     "check": "npm run validate && npm run build:check",
-    "links": "node scripts/install-links.mjs",
-    "links:check": "node scripts/install-links.mjs --check",
+    "assets": "node scripts/install-assets.mjs",
+    "assets:check": "node scripts/install-assets.mjs --check",
+    "links": "node scripts/install-assets.mjs --link",
     "test": "node --test"
   },
   "dependencies": {

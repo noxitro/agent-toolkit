@@ -35,8 +35,8 @@ plugins/toolkit-core/             生成物 — Claude Code プラグインの�
 dist/                             生成物 — コピーして使う配布物
   opencode/{agent,command}/
   copilot/{skills,prompts,agents}/
-scripts/                          ビルドと検証、リンクの導入
-install-links.bat                 Windows 用のリンク導入(scripts/install-links.mjs を呼ぶ)
+scripts/                          ビルド、検証、インストーラ
+install.bat                       Windows 用のインストーラ(scripts/install-assets.mjs を呼ぶ)
 tests/                            スキルに同梱するスクリプトの単体テスト
 toolkit.config.json               リポジトリごとのビルド設定
 docs/                             ハーネスごとのメモ
@@ -51,7 +51,17 @@ docs/                             ハーネスごとのメモ
 
 ## 導入
 
-### Claude Code
+どの方法も、入るのは同じ生成物。1 台の PC ではどれか 1 つにする(重ねると同じ資産が二重に
+読み込まれる)。
+
+| 使い方 | おすすめの方法 |
+| --- | --- |
+| Claude Code だけ使う | [プラグイン](#claude-code-のプラグイン)。権限不要で、更新も `/plugin` から |
+| OpenCode / Copilot も使う、またはプラグインを使わない | [インストーラ](#インストーラユーザー単位にコピー)でユーザー単位のフォルダにコピー |
+| 1 つのリポジトリのメンバー全員に Copilot 用の資産を配る | [そのリポジトリの `.github/` にコピー](#リポジトリの-github-にコピーcopilot) |
+| このリポジトリで資産を開発している | [インストーラのリンクモード](#開発者向けリンクモード) |
+
+### Claude Code のプラグイン
 
 ```bash
 /plugin marketplace add noxitro/agent-toolkit
@@ -61,72 +71,77 @@ docs/                             ハーネスごとのメモ
 /plugin install toolkit-core@agent-toolkit
 ```
 
-### OpenCode
+### インストーラ(ユーザー単位にコピー)
 
-配布物をグローバル設定ディレクトリ(全プロジェクト)か、1 つのプロジェクトの `.opencode/` に
-コピーする。OpenCode はそこから `agent/` と `command/` の両方を読む。
+生成物を各ツールがユーザー単位で読むフォルダにコピーする。管理者権限も Windows の開発者モードも
+要らず、コピーが終わればダウンロードしたフォルダは消してよい。必要なのは Node.js 20 以上だけ
+(`npm ci` は不要)。
 
-```bash
-cp -r dist/opencode/. ~/.config/opencode/
-```
+1. [リリース](https://github.com/noxitro/agent-toolkit/releases)の「Source code (zip)」をダウンロード
+   して展開する(または `git clone`)。
+2. **Windows**:展開したフォルダの `install.bat` をダブルクリックする。インターネットから落とした
+   ファイルなので、確認の画面が出たら「実行」を選ぶ。Node.js が無ければ入れ方
+   (`winget install OpenJS.NodeJS.LTS`)を表示して止まる。
+   **macOS / Linux**:展開したフォルダで `node scripts/install-assets.mjs` を実行する。
+3. 初回だけ、どのツール向けに入れるかを番号で聞かれる(例:`1,3`)。
+4. 各ツールで新しいセッションを開くと読み込まれる。
 
-### GitHub Copilot(VS Code / CLI)
+更新は、新しい版をダウンロードして同じように実行するだけ。選んだツールと入れたファイルの記録は
+ダウンロードしたフォルダではなく `~/.agent-toolkit/` にあるので、別の場所に展開した新しい版からでも
+更新・削除できる。
 
-使いたいリポジトリに配布物をコピーする。
+| 操作 | Windows | macOS / Linux |
+| --- | --- | --- |
+| 入れる・更新する | `install.bat` | `node scripts/install-assets.mjs` |
+| ツールを選び直す | `install.bat --setup` | `node scripts/install-assets.mjs --setup claude,copilot` |
+| 状態を確かめる(何も変えない) | `install.bat --check` | `node scripts/install-assets.mjs --check` |
+| アンインストール | `install.bat --remove` | `node scripts/install-assets.mjs --remove` |
 
-```bash
-cp -r dist/copilot/. .github/
-```
-
-1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
-場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
-
-### このクローンからシンボリックリンクで導入(開発中の自分用・おすすめ)
-
-コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクを各ハーネスのユーザー単位の
-探索場所に張る。`npm run build` の結果がそのまま全セッションに反映され、`git pull` だけで更新が届く。
-
-**Windows** はリポジトリ直下の `install-links.bat` をダブルクリックする(またはターミナルで実行)。
-Node.js 20 以上、開発者モード、npm の依存を確かめてから、初回だけどのハーネスに張るかを聞く。
-開発者モードが無効なら設定画面を開くので、オンにしてもう一度実行する。
-
-```bat
-install-links.bat            :: 初回は対象を選んで張る。2 回目以降は張り直し・修復
-install-links.bat --setup    :: 対象ハーネスを選び直す
-install-links.bat --check    :: 状態の確認だけ(何も変えない)
-install-links.bat --remove   :: このクローンが張ったリンクをすべて外す
-```
-
-**macOS / Linux**(Windows のターミナルからも可)は同じことを npm で行う。
-
-```bash
-npm ci
-npm run links                          # 初回は対象を聞かれる
-npm run links -- --setup claude,copilot  # 非対話で選ぶ
-npm run links:check
-npm run links -- --remove
-```
-
-選んだハーネスは `toolkit.local.json`(git に入らない)の `harnesses` に保存され、実行のたびに
-生成物から張るリンクを数え直す。資産を増やしたら `npm run build` のあとにもう一度実行すれば
-リンクが増え、消した資産や選択を外したハーネスのリンク(このクローンを指すものだけ)は外れる。
-
-| ハーネス | リンク先 |
+| ツール | コピー先 |
 | --- | --- |
 | `claude` | `~/.claude/skills/`、`~/.claude/commands/`、`~/.claude/agents/` |
 | `opencode` | `~/.config/opencode/commands/`、`~/.config/opencode/agents/` |
 | `copilot` | `~/.copilot/skills/`、`~/.copilot/agents/`、VS Code のユーザー プロンプト フォルダ(既定プロファイル) |
 
-Copilot(VS Code / CLI)は `~/.claude/skills/` と `~/.claude/agents/` も読むので、`claude` と `copilot` を
-両方選ぶと、二重に見えないよう Copilot 側のスキルとエージェントは張らない(プロンプトだけ張る)。
+安全側の決まり:
 
-プリセットで足りない場所は `toolkit.local.json` の `links` に個別に書く(`path` は `~` 始まり可、
-`target` はリポジトリからの相対)。全員に張りたいリンクだけを `toolkit.config.json` の `links` に書く。
-書式は `toolkit.local.example.json` を参照。
+- **自分で置いたものは上書きしない。** インストーラが入れていないファイル、入れたあとに編集された
+  ファイルは、上書きも削除もせずに知らせる(`--force` を付けたときだけ上書きする)。中身がこの版と
+  同じなら、そのまま管理下に入れる。
+- **要らなくなったものは消す。** 新しい版で無くなった資産や、選択から外したツールの資産は、
+  インストーラが入れて未編集のものだけ削除する。
+- Copilot(VS Code / CLI)は `~/.claude/skills/` と `~/.claude/agents/` も読むので、`claude` と `copilot` を
+  両方選ぶと、二重に見えないよう Copilot 側のスキルとエージェントは入れない(プロンプトだけ入れる)。
+- Claude Code のプラグインで入れている場合は、先に `/plugin uninstall toolkit-core@agent-toolkit` で外す。
 
-リンクは絶対パスで張られるので、クローンを移動したら張り直す。同じ資産をプラグインやコピーでも
-導入すると二重に読み込まれるので、どれか 1 つにする(プラグインから移るときは
-`/plugin uninstall toolkit-core@agent-toolkit` で外してから張る)。
+### リポジトリの `.github/` にコピー(Copilot)
+
+1 つのリポジトリで、そのメンバー全員に使わせたい場合は、そのリポジトリに配布物をコピーして
+コミットする。Visual Studio 2026 ではこれが公式の経路。
+
+```bash
+cp -r dist/copilot/. .github/
+```
+
+### 開発者向け:リンクモード
+
+このリポジトリで資産を開発しているなら、コピーの代わりにこのクローンへのシンボリックリンクを
+張れる。`npm run build` や `git pull` の結果がそのまま全セッションに反映される。
+
+```bash
+npm run links                    # = node scripts/install-assets.mjs --link
+npm run assets -- --copy         # コピーに戻す
+npm run assets:check
+```
+
+Windows では `install.bat --link`。シンボリックリンクの作成には**開発者モード**(または管理者として
+実行)が要り、無効なら設定画面を開く。開発者モードは PC 全体の設定で、組織の管理下の PC では有効に
+できないことが多いので、利用者への配布にはコピーを使う。リンクは絶対パスで張られるので、クローンを
+移動したらもう一度実行する。
+
+プリセットで足りない場所は `toolkit.local.json`(git に入らない)の `links` に個別に書く(`path` は
+`~` 始まり可、`target` はリポジトリからの相対)。選んだモードで入る。全員に入れたいものだけを
+`toolkit.config.json` の `links` に書く。書式は `toolkit.local.example.json` を参照。
 
 ## 資産の書き方
 
@@ -188,8 +203,9 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
-| `npm run links` | 生成物へのシンボリックリンクをユーザー単位の探索場所に張る(`-- --setup`・`-- --remove` も可。Windows は `install-links.bat`) |
-| `npm run links:check` | リンクの状態を確かめる。欠落・誤り・不要なリンクがあれば失敗 |
+| `npm run assets` | 生成物をユーザー単位の探索場所に入れる・更新する(`-- --setup`・`-- --remove` も可。Windows は `install.bat`) |
+| `npm run assets:check` | 入っている資産の状態を確かめる。欠落・古い版・不要なものがあれば失敗 |
+| `npm run links` | `assets` をリンクモードで実行する(開発者向け) |
 | `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト。Python が PATH に無ければ Python のテストはスキップ) |
 
 ## CI

@@ -1,13 +1,15 @@
-// Harness presets for scripts/install-links.mjs: which generated files go into which per-user
+// Harness presets for scripts/install-assets.mjs: which generated files go into which per-user
 // discovery folder. A preset is expanded from the generated output on every run, so an asset
-// added by the next build is linked by the next run without editing any config.
+// added by the next build is installed by the next run without editing any config.
+// No npm dependencies here: the installer runs from a downloaded ZIP without `npm ci`.
 //
 // Locations (checked 2026-10; harness-version dependent, see docs/harness-notes.md):
 //   claude    ~/.claude/{skills,commands,agents}/
 //   opencode  ~/.config/opencode/{commands,agents}/ (XDG_CONFIG_HOME honoured, also on Windows)
 //   copilot   ~/.copilot/{skills,agents}/ and the VS Code user prompts folder (default profile)
 
-import { existsSync, lstatSync, readdirSync, readlinkSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 
 export const HARNESSES = ['claude', 'opencode', 'copilot']
@@ -66,10 +68,10 @@ function sources(claudePlugin) {
 export const SHARED_WITH_CLAUDE = ['skills', 'agents']
 
 /**
- * Links for the selected harnesses: [{ path, target }] with an absolute `path` and a
- * `target` relative to `root`, the shape install-links.mjs reads from its config files.
+ * Entries for the selected harnesses: [{ path, target }] with an absolute `path` and a
+ * `target` relative to `root`, the same shape as "links" in the config files.
  */
-export function presetLinks(root, harnesses, { claudePlugin, home, platform, env }) {
+export function presetEntries(root, harnesses, { claudePlugin, home, platform, env }) {
   const dirs = userDirs({ home, platform, env })
   const src = sources(claudePlugin)
   const links = []
@@ -99,7 +101,7 @@ export function normalize(p, platform = process.platform) {
   return platform === 'win32' ? r.replace(/\//g, '\\').toLowerCase() : r
 }
 
-function isInside(child, parent, platform) {
+export function isInside(child, parent, platform = process.platform) {
   const c = normalize(child, platform)
   const p = normalize(parent, platform)
   return c === p || c.startsWith(p + (platform === 'win32' ? '\\' : sep))
@@ -128,4 +130,24 @@ export function staleLinks(dirs, root, keep, platform = process.platform) {
     }
   }
   return stale
+}
+
+/**
+ * Content hash of a file or directory tree (relative paths and bytes), used to tell an
+ * installed copy that is still as installed from one the user has edited since.
+ */
+export function treeHash(p) {
+  const h = createHash('sha256')
+  const walk = (abs, rel) => {
+    if (lstatSync(abs).isDirectory()) {
+      h.update(`d ${rel}\0`)
+      for (const e of readdirSync(abs).sort()) walk(join(abs, e), rel ? `${rel}/${e}` : e)
+    } else {
+      h.update(`f ${rel}\0`)
+      h.update(readFileSync(abs))
+      h.update('\0')
+    }
+  }
+  walk(p, '')
+  return h.digest('hex')
 }
