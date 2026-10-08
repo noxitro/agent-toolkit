@@ -77,3 +77,6 @@ GitHub Copilot ─(skill: m365-skill-pack)→ スクリプト ─(UI Automation)
 - **個人向けの無料 Copilot にバンドルを添付しない**(企業向けデータ保護が無い)。
 - **このリポジトリをフォークして職場の GitHub に置く場合**は、`.github/workflows/claude.yml`(Claude を呼ぶ)を消し、
   `.github/workflows/secret-scan.yml`(外部リポジトリの共通ワークフローを `@main` で参照)を組織のものに置き換える。
+  `.claude/settings.json` と `.claude/hooks/session-start.sh` も消してよい(Claude Code on the web で開いたときだけ、
+  作者の共通 git フックを外部リポジトリから取得して設定する。手元や GitHub Copilot では何もしない)。
+  プラグインとして入れるだけなら、これらはどれも動かない(プラグインに含まれない、または GitHub 上でだけ動く)。
