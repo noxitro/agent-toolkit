@@ -10,7 +10,9 @@ Microsoft 365 Copilot のカスタムエージェント(Agent Builder)に「実�
 | --- | --- |
 | `SKILL.md` | Claude Code / GitHub Copilot 向けの手順(英語)。ハーネスが自動で読む |
 | `m365/SETUP.md` | **Microsoft 365 Copilot 側で 1 回だけ行う**セットアップ手順(日本語) |
-| `m365/agents/impl-loop.md`, `m365/agents/auditor.md` | Agent Builder に貼るエージェント定義シート |
+| `m365/agents/impl-loop.md`, `m365/agents/auditor.md` | Agent Builder に貼るエージェント定義シート(標準の使い方) |
+| `m365/agents/impl-session.md`, `m365/agents/review-session.md` | 外部ループ用のエージェント定義シート(下の「外部ループ」) |
+| `scripts/lib/external-loop.mjs` | 外部ループの判定ロジック(`runLoop`)。チャットを操作する部品は含まない |
 | `m365/skills/implement`, `audit`, `probe` | Microsoft 365 側のスキル素材(`SKILL.template.md` + Python スクリプト) |
 | `scripts/pack-skill.mjs` | スキルを検証して Agent Builder 用 `.zip` にする |
 | `scripts/make-input.mjs` | リポジトリ全体 + `_m365/TASK.md` を入力 ZIP にする(中身は読まない) |
@@ -32,6 +34,19 @@ Store 版アプリや個人アカウントの copilot.microsoft.com)には EDP �
 - ローカルに Node 20 以上。依存パッケージは不要(スクリプトは標準モジュールのみ)。
 - サンドボックスの Python 版や添付ファイルの扱いは公式文書に無いため、**最初に probe スキルで
   実測**し、`references/*.md` の「Measured」表に書き込んでから本番に使う。
+
+## 導入後に利用者がやること
+
+Microsoft 365 Copilot には外から操作する API が無いので、Copilot 側の操作は人が行う。
+Claude Code / GitHub Copilot はこの skill に従って、各段階で次に人がやることを案内する。
+
+| いつ | 人がやること | エージェント(この skill)がやること |
+| --- | --- | --- |
+| 初回だけ | `m365/SETUP.md` に沿って、Agent Builder で `impl-loop` と `auditor` を作り、スキル ZIP を取り付け、probe を流して結果を持ち帰る | スキル ZIP を作る。probe の結果を `references/*.md` の「Measured」表に書く |
+| タスクごと | `impl-loop` に入力 ZIP を添付してスターター プロンプトを送る。返ってきた出力 ZIP をダウンロードして渡す。必要なら `auditor` にも同じ ZIP を渡す | `TASK.md` を書き、入力 ZIP を作り、出力 ZIP を取り込んで判定を報告する |
+
+エージェントは作業の初めに「エージェントはもう作ってあるか」を尋ね、「Measured」表が空なら
+probe が未実施であることを伝える。
 
 ## 使い方
 
@@ -96,6 +111,20 @@ Claude Code のプラグインとして導入した場合はプラグインの `
 `pack-skill.mjs` が使えないときは、`SKILL.template.md` を `SKILL.md` に改名し、`common/` の
 中身をコピーしたうえで、PowerShell 7 の `Compress-Archive` でフォルダの**中身**(フォルダ自体では
 なく)を圧縮する。拡張子・深さ・文字数の検証は手で行う。
+
+## 外部ループ(スクリプトが 2 つのチャットを回す)
+
+標準の使い方では、`impl-loop` が 1 回のやり取りの中で実装と自己監査を繰り返す。外部ループは、
+実装のチャット(`impl-session`)とレビューのチャット(`review-session`)の間を手元のスクリプトが
+行き来させ、毎ラウンド別のエージェントにレビューさせる形。規約は `references/loop-protocol.md` の
+「External loop」。
+
+| 含まれているもの | 利用者が作るもの |
+| --- | --- |
+| 判定ロジック `scripts/lib/external-loop.mjs`(各返答の 1 行目の状態行で次の送り先を決め、想定外の返答では止まる) | Copilot のチャットを操作する部品(送信、返答の完了待ち、返されたファイルの保存)。`turn(round, message, attachments)` を持つセッションとして `runLoop` に渡す |
+| エージェント定義シート `impl-session` / `review-session` | 実リポジトリに対して `runLoop` を回し、結果を取り込んで要約を返す入口のスクリプト |
+
+上の 2 つを作るまでは、外部ループは使えない。その間は標準の使い方(`impl-loop` + `auditor`)を使う。
 
 ## Cowork について
 

@@ -43,6 +43,28 @@ whenever the user proposes attaching a bundle to anything other than that tenant
   "Measured" tables there as the current truth about the sandbox; if they are empty,
   the probe has not been run yet and every sandbox assumption is unverified.
 
+## Before anything: find out where the user is
+
+Nothing here can see Microsoft 365, so ask instead of assuming, once per conversation:
+
+1. **Do the agents exist?** Ask whether `impl-loop` and `auditor` have already been
+   created in the user's Agent Builder. If not, or the user is unsure, do "First time
+   only" below and stop there.
+2. **Was the sandbox measured?** Read the "Measured" tables in
+   `references/m365-constraints.md` and `references/agent-builder-rules.md`. If they are
+   empty, say so: zip attachments and the Python version are unverified, the probe step
+   of `m365/SETUP.md` is still open, and `--format md` is the fallback if a zip attachment
+   turns out to be unreadable.
+3. **Did the user ask for the two-session loop?** This skill ships only the controller
+   (`scripts/lib/external-loop.mjs`) and the agent sheets `impl-session` / `review-session`.
+   Running it needs two things the user must build first: a driver that operates the
+   Copilot chat UI (send, wait for the reply, save returned files) and an entry script
+   that runs `runLoop` on the repository. Say this plainly and use the per-task steps
+   below until both exist.
+
+At every hand-off, tell the user the exact manual step that comes next (which agent,
+which file to attach, which starter prompt to send, which file to bring back).
+
 ## First time only
 
 Build the three zips and hand the user `m365/SETUP.md`:
