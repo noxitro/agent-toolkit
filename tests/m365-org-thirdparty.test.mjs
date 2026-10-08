@@ -1,6 +1,6 @@
 // Tests for the imported public skills under m365-org-skills/third-party and for the agent
 // sheets under m365-org-skills/agents. The packages are assembled by
-// third-party/import_upstream.py from upstream clones; these tests need no network and check
+// m365-org-skills/scout/import-upstream.mjs from upstream clones; these tests need no network and check
 // that the assembled packages still carry the upstream text untouched, the license, the
 // Japanese adaptation section, and that every sheet names only skills that exist.
 

@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Public repositories that scout.mjs fetches and scans. Add an entry to scan another repository.",
+    "repo: owner/name on GitHub. globs: the skill folders, relative to the repository root ('*' stays within one folder level, '**' crosses levels).",
+    "note: a Japanese note shown in the report. url (optional): a clone URL other than https://github.com/<repo>.git.",
+    "The cache folder is named after the repository part of 'repo', so two entries must not share it."
+  ],
+  "sources": [
+    {
+      "repo": "github/awesome-copilot",
+      "globs": ["skills/*"],
+      "note": "GitHub が集めている Copilot 向けのスキル集。MIT。スキルによっては個別の LICENSE を持つので、行ごとのライセンス欄を見る。"
+    },
+    {
+      "repo": "microsoft/cat-agent-skills",
+      "globs": ["submissions/*"],
+      "note": "Microsoft の Copilot Acceleration Team が集めたスキル。MIT。Copilot Studio 向けのものが多く、ライブラリ前提のものは probe での確認が要る。"
+    },
+    {
+      "repo": "anthropics/knowledge-work-plugins",
+      "globs": ["*/skills/*"],
+      "note": "Anthropic の業務別プラグイン(経理・人事・営業・法務など)。Apache-2.0。~~ で始まるコネクタ前提の記述が多い。"
+    },
+    {
+      "repo": "anthropics/skills",
+      "globs": ["skills/*"],
+      "note": "Anthropic の公式スキル集。スキルごとにライセンスが違う。docx / pptx / xlsx / pdf は独自ライセンスで社内配布できない。"
+    }
+  ]
+}

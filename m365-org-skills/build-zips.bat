@@ -22,7 +22,7 @@ rem Our own skills: SKILL.template.md plus the shared common\ scripts
 node "%PACK%" "%S%\minutes" --from-template --out "%OUT%"
 if errorlevel 1 goto :failed
 
-rem Imported public skills: SKILL.md as assembled by third-party\import_upstream.py
+rem Imported public skills: SKILL.md as assembled by scout\import-upstream.mjs
 node "%PACK%" "%T%\incident-postmortem" "%T%\root-cause-analysis" "%T%\create-architectural-decision-record" "%T%\create-specification" "%T%\prd" "%T%\sql-code-review" "%T%\meeting-minutes" --out "%OUT%"
 if errorlevel 1 goto :failed
 
