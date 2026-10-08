@@ -154,3 +154,61 @@ Starter prompt for `auditor`:
 Unpack the attached output bundle with the audit skill, audit it against the task file
 inside it, and return exactly one audit bundle containing only the AUDIT.md report.
 ```
+
+## External loop (script-driven, two sessions)
+
+The alternative to the in-agent loop above, for setups where a local script can operate
+the chat UI (for example through UI Automation). Two chats stay open for the whole task:
+session A with the `impl-session` agent and session B with the `review-session` agent.
+The script carries every bundle between them and decides where each reply goes. Agents
+never talk to each other directly, and neither agent ever sees the local disk.
+
+```text
+script --input bundle--> A --CONTINUE + out bundle--> script --out bundle--> B
+   ^                                                                        |
+   +-- A: PASS (done) / CONTINUE (fixed, review again) <-- review bundle ---+
+```
+
+### Status line
+
+The first line of every agent reply is the status line. The script reads only this line
+to route the reply; nothing else in the chat text is parsed.
+
+```text
+M365-STATUS: <CONTINUE|PASS|FAIL> session=<token> round=<n>
+```
+
+- `token` and `n` are echoed from the first two lines of the message the agent answers
+  (`session: <token>` and `round: <n>`). A reply whose token differs is a reply to the
+  wrong chat: the script stops.
+- Session A: `CONTINUE` = a new output bundle `out-<slug>-r<n>.zip` is attached and needs
+  review (round 1 is always `CONTINUE`); `PASS` = no valid finding is left, the last bundle
+  is final, nothing is attached; `FAIL` = cannot go on (bundle missing or unreadable, task
+  impossible) with the reason on the second line.
+- Session B: `PASS` or `FAIL`, equal to the verdict in the attached review bundle
+  `audit-<slug>-r<n>.zip` (only `_m365/AUDIT.md`). B always attaches the review.
+- The status line routes; the verdict of record stays the JSON block of `_m365/AUDIT.md`.
+  A status that disagrees with that JSON stops the loop.
+
+### Turns
+
+1. Script -> A, round 1: the input bundle. A implements and answers `CONTINUE`.
+2. Script -> B, round n: A's latest output bundle. B audits it like `auditor` and answers
+   `PASS` or `FAIL` with the review bundle.
+3. Script -> A, round n+1: A's own latest output bundle **and** B's review bundle. Each turn
+   is self-contained (the sandbox may not keep files between turns), so A unpacks the
+   attached output bundle again. For each finding A decides: valid (it names a requirement
+   of `_m365/TASK.md` - an `AC-n`, the scope, a constraint, a forbidden pattern - or a real
+   defect in the files) or not. Any valid finding: fix all of them and answer `CONTINUE`
+   with the new bundle. None: answer `PASS` and list each rejected finding with a one-line
+   reason under the status line.
+4. Repeat 2-3 until A answers `PASS` or `FAIL`.
+
+### What the script enforces
+
+- Round budget: `## Max rounds` of `_m365/TASK.md` (default 3) counts A's implementing
+  turns. A `CONTINUE` beyond it ends the loop as `budget` and hands the task to a person.
+- A `PASS` after a `FAIL` review means A rejected findings: the result is marked for a
+  person to look at, never treated as a clean pass.
+- Missing status line, wrong token, `CONTINUE` without a bundle, or a status that disagrees
+  with the attached `AUDIT.md`: the loop stops as a protocol error. It never guesses.
