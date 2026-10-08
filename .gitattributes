@@ -6,6 +6,8 @@
 # fails in the Linux sandbox and SKILL.md must be UTF-8 without BOM.
 shared/skills/m365-skill-pack/m365/** text eol=lf
 shared/skills/m365-skill-pack/scripts/** text eol=lf
+m365-org-skills/skills/** text eol=lf
+m365-org-skills/third-party/** text eol=lf
 
 # Shell scripts run under bash/sh on Linux (cloud sessions, CI) and under Git for Windows' sh.
 # With core.autocrlf=true a CRLF checkout breaks them ("set -uo pipefail\r"), e.g.

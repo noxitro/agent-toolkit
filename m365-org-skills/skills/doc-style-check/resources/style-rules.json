@@ -1,0 +1,57 @@
+{
+  "_説明": "社内文書の表記ルール。〇〇社の表記基準に合わせて自由に編集してください。pattern は既定で文字列の完全一致、\"regex\": true のときは Python の正規表現です。note は提案欄に添える理由です。",
+  "max_sentence_chars": 80,
+  "max_commas_per_sentence": 4,
+  "max_findings": 300,
+  "checks": {
+    "variants": true,
+    "zenkaku_alnum": true,
+    "hankaku_kana": true,
+    "style_mix": true,
+    "sentence_length": true,
+    "commas": true,
+    "duplicate_punctuation": true,
+    "brackets": true,
+    "redundant": true,
+    "forbidden": true
+  },
+  "variants": [
+    {"pattern": "出来(?=る|ます|ません|ない|なく|なかっ|れば|た|て|ず|よう)", "regex": true, "suggest": "でき", "note": "可能の「できる」はひらがな"},
+    {"pattern": "(?<=[てで])下さい", "regex": true, "suggest": "ください", "note": "補助動詞はひらがな"},
+    {"pattern": "(?<=[てで])頂(?=[きくけい])", "regex": true, "suggest": "いただ", "note": "補助動詞はひらがな"},
+    {"pattern": "致します", "suggest": "いたします", "note": "補助動詞はひらがな"},
+    {"pattern": "致しました", "suggest": "いたしました", "note": "補助動詞はひらがな"},
+    {"pattern": "宜しく", "suggest": "よろしく", "note": "ひらがなで書く"},
+    {"pattern": "有難う", "suggest": "ありがとう", "note": "ひらがなで書く"},
+    {"pattern": "及び(?![、，ませ])", "regex": true, "suggest": "および", "note": "接続詞はひらがな(〇〇社基準の例。動詞「及ぶ」は対象外)"},
+    {"pattern": "又は", "suggest": "または", "note": "接続詞はひらがな(〇〇社基準の例)"},
+    {"pattern": "但し", "suggest": "ただし", "note": "接続詞はひらがな"},
+    {"pattern": "尚、", "suggest": "なお、", "note": "接続詞はひらがな"},
+    {"pattern": "是非", "suggest": "ぜひ", "note": "副詞はひらがな"},
+    {"pattern": "殆ど", "suggest": "ほとんど", "note": "副詞はひらがな"},
+    {"pattern": "予め", "suggest": "あらかじめ", "note": "副詞はひらがな"},
+    {"pattern": "(?<=[るたい])事(?=[がをはにもで])", "regex": true, "suggest": "こと", "note": "形式名詞はひらがな"},
+    {"pattern": "ユーザ(?![ー])", "regex": true, "suggest": "ユーザー", "note": "長音を付ける(〇〇社基準の例)"},
+    {"pattern": "サーバ(?![ー])", "regex": true, "suggest": "サーバー", "note": "長音を付ける(〇〇社基準の例)"}
+  ],
+  "redundant": [
+    {"pattern": "することができる", "suggest": "できる", "note": "冗長表現"},
+    {"pattern": "することができます", "suggest": "できます", "note": "冗長表現"},
+    {"pattern": "まず最初に", "suggest": "最初に", "note": "重言"},
+    {"pattern": "一番最初", "suggest": "最初", "note": "重言"},
+    {"pattern": "後で後悔", "suggest": "後悔", "note": "重言"},
+    {"pattern": "あらかじめ予定", "suggest": "予定", "note": "重言"},
+    {"pattern": "という形で", "suggest": "(削除または「として」)", "note": "冗長表現"},
+    {"pattern": "ないわけではない", "suggest": "肯定形で言い換える", "note": "二重否定", "type": "二重否定"},
+    {"pattern": "ないことはない", "suggest": "肯定形で言い換える", "note": "二重否定", "type": "二重否定"},
+    {"pattern": "なくはない", "suggest": "肯定形で言い換える", "note": "二重否定", "type": "二重否定"},
+    {"pattern": "ないとは言えない", "suggest": "肯定形で言い換える", "note": "二重否定", "type": "二重否定"},
+    {"pattern": "させていただきます", "suggest": "いたします / します", "note": "過剰な敬語になっていないか確認"}
+  ],
+  "forbidden": [
+    {"pattern": "ヤバい", "suggest": "(言い換え)", "note": "ビジネス文書に不適切な語の例"},
+    {"pattern": "マジで", "suggest": "(言い換え)", "note": "ビジネス文書に不適切な語の例"},
+    {"pattern": "ぶっちゃけ", "suggest": "(言い換え)", "note": "ビジネス文書に不適切な語の例"},
+    {"pattern": "絶対に儲かる", "suggest": "(削除)", "note": "断定的な利益表現は使わない例"}
+  ]
+}

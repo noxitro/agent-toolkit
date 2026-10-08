@@ -40,6 +40,8 @@ install.bat                       Windows 用のインストーラ(scripts/insta
 tests/                            スキルに同梱するスクリプトの単体テスト
 toolkit.config.json               リポジトリごとのビルド設定
 docs/                             ハーネスごとのメモ
+m365-org-skills/                  Microsoft 365 Copilot(Agent Builder)で開発チームに配るスキルとエージェント定義
+                                  (ハーネス向けの生成対象ではない。README は m365-org-skills/README.md)
 ```
 
 `scripts/` と `toolkit.config.json` は、同じツールチェーンを姉妹リポジトリ(公開前の資産を
