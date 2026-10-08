@@ -138,6 +138,9 @@ the check results and what was fixed. Not parsed.
 
 - `impl-loop`: `out-<slug>-r<N>.zip` where N is the final round.
 - `auditor`: `audit-<slug>.zip` containing only `_m365/AUDIT.md` with a single round.
+- External loop: `impl-session` returns `out-<slug>-r<n>.zip` every round it answers
+  `CONTINUE` (cumulative, `pack --full`); `review-session` returns `audit-<slug>-r<n>.zip`
+  (only `_m365/AUDIT.md`) for the round it reviewed. See "External loop" below.
 
 ## Fixed prompts
 

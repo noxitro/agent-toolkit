@@ -80,6 +80,12 @@ cp -r dist/copilot/. .github/
 1 つのリポジトリでなく全ワークスペースで使いたい場合は、プロンプトファイルをユーザーレベルの
 場所に置く。[docs/harness-notes.md](docs/harness-notes.md) を参照。
 
+### 職場でフォークして使う場合
+
+コードを見せてよい AI が Microsoft 365 Copilot と GitHub Copilot に限られる環境では、フォーク後に止めるもの
+(無料モデルを使う opencode ドライバ、Claude を呼ぶワークフローなど)とデータの行き先を
+[docs/workplace-fork.md](docs/workplace-fork.md) で確認する。
+
 ### このクローンからシンボリックリンクで導入(開発中の自分用)
 
 コピーやプラグイン導入の代わりに、生成物へのシンボリックリンクをユーザーレベルの探索場所に張ると、
