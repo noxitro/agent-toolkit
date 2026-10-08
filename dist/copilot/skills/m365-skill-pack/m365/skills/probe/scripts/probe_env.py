@@ -9,8 +9,7 @@ directory). Sections: Python version, platform, cwd, argv, sys.path, environment
 variable NAMES (never values), listings of likely attachment directories, .zip/.md
 files found up to depth 2, a zipfile open test, resource limits, an import matrix,
 and tools on PATH. It never opens a network connection: the sandbox is documented to
-have no network, and an attempt to reach an outside address can trip the security
-monitoring of a workplace.
+have no network, and an unexpected outbound attempt can trip security monitoring.
 
 Every section catches its own errors and reports them; the script never raises.
 Python 3.8+, standard library only.

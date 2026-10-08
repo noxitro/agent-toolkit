@@ -15,8 +15,7 @@
     "check": "npm run validate && npm run build:check",
     "links": "node scripts/install-links.mjs",
     "links:check": "node scripts/install-links.mjs --check",
-    "test": "node --test",
-    "export:m365": "node scripts/export-m365.mjs"
+    "test": "node --test"
   },
   "dependencies": {
     "yaml": "^2.6.1"
