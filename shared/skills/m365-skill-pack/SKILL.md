@@ -31,8 +31,9 @@ whenever the user proposes attaching a bundle to anything other than that tenant
 - `m365/agents/impl-session.md`, `m365/agents/review-session.md` - the two agents of the
   script-driven "External loop" in `references/loop-protocol.md` (session A implements,
   session B reviews, a local script routes each reply by its `M365-STATUS:` first line).
-  Only for setups where something local can operate the chat UI; there is no such driver
-  in this skill yet, so the per-task steps below use `impl-loop` and `auditor`.
+  The controller is `scripts/lib/external-loop.mjs` (`runLoop`, independent of how turns
+  are carried); the driver that operates the chat UI is not part of this skill, so the
+  per-task steps below use `impl-loop` and `auditor`.
 - `m365/skills/{implement,audit,probe}/` - the skill sources, packaged with
   `scripts/pack-skill.mjs --from-template`. They are project-independent; project
   conventions travel inside each input bundle. `<skill-dir>` below is wherever this

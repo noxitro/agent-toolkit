@@ -2,15 +2,15 @@
 """Measure the script sandbox and write a plain-text report.
 
 Usage:
-    python3 probe_env.py [--out probe-output.txt] [--network]
+    python3 probe_env.py [--out probe-output.txt]
 
 Prints the report and writes it to --out (default probe-output.txt in the current
 directory). Sections: Python version, platform, cwd, argv, sys.path, environment
 variable NAMES (never values), listings of likely attachment directories, .zip/.md
 files found up to depth 2, a zipfile open test, resource limits, an import matrix,
-tools on PATH, and - only with --network - a 2-second outbound connection attempt.
-Without --network nothing is sent anywhere: the documented sandbox has no network, and
-an attempt to reach an outside address can trip the security monitoring of a workplace.
+and tools on PATH. It never opens a network connection: the sandbox is documented to
+have no network, and an attempt to reach an outside address can trip the security
+monitoring of a workplace.
 
 Every section catches its own errors and reports them; the script never raises.
 Python 3.8+, standard library only.
@@ -19,7 +19,6 @@ Python 3.8+, standard library only.
 import os
 import sys
 
-NETWORK = False  # set by --network in main()
 ROOTS = ["cwd", "home", "/mnt", "/mnt/data", "/mnt/user-data", "/tmp", "/home", "/workspace"]
 LIST_LIMIT = 50
 FIND_DEPTH = 2
@@ -233,26 +232,10 @@ def s_tools():
         emit("  %s" % p)
 
 
-def s_network():
-    if not NETWORK:
-        emit("network: not tested (run with --network to try an outbound connection to 1.1.1.1:443)")
-        return
-    import socket
-    try:
-        conn = socket.create_connection(("1.1.1.1", 443), timeout=2)
-        conn.close()
-        emit("network: CONNECTED to 1.1.1.1:443 (outbound network is available)")
-    except BaseException as e:
-        if isinstance(e, KeyboardInterrupt):
-            raise
-        emit("network: no connection - %s: %s" % (type(e).__name__, e))
-
 
 def main():
-    global NETWORK
     out = "probe-output.txt"
     args = sys.argv[1:]
-    NETWORK = "--network" in args
     if "--out" in args:
         i = args.index("--out")
         if i + 1 < len(args):
@@ -273,7 +256,6 @@ def main():
     section("limits", s_limits)
     section("import matrix", s_imports)
     section("tools on PATH", s_tools)
-    section("network", s_network)
 
     text = "\n".join(lines) + "\n"
     try:

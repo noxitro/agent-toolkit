@@ -12,8 +12,7 @@ changes.
 ## How to run
 
 1. Execute `scripts/probe_env.py`. It never fails on purpose: every section catches its
-   own errors and reports them. Never pass `--network` unless the user explicitly asks for
-   an outbound connection test; without it the script contacts nothing.
+   own errors and reports them. The script never opens a network connection.
 2. If a file was attached to the conversation, also run
    `scripts/probe_env.py --out probe-output.txt` after noting where the attachment is
    visible from the script (the report lists candidate directories and any `.zip` or

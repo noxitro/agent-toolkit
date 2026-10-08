@@ -82,9 +82,10 @@ cp -r dist/copilot/. .github/
 
 ### 職場でフォークして使う場合
 
-コードを見せてよい AI が Microsoft 365 Copilot と GitHub Copilot に限られる環境では、フォーク後に止めるもの
-(無料モデルを使う opencode ドライバ、Claude を呼ぶワークフローなど)とデータの行き先を
-[docs/workplace-fork.md](docs/workplace-fork.md) で確認する。
+コードを見せてよい AI が Microsoft 365 Copilot と GitHub Copilot に限られる環境では、このリポジトリを
+フォークせず、`m365-skill-pack` だけを書き出した本番用リポジトリを使う(`npm run export:m365 -- <dir>`)。
+テスト用の模擬環境や無料モデルを使う経路は一切入らない。詳細とデータの行き先は
+[docs/workplace-fork.md](docs/workplace-fork.md)。
 
 ### このクローンからシンボリックリンクで導入(開発中の自分用)
 
@@ -161,6 +162,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run build` | 生成物のディレクトリをすべて `shared/` から作り直す |
 | `npm run build:check` | コミット済みの生成物がソースと一致しなければ失敗(欠落・陳腐化・孤児ファイル) |
 | `npm run check` | `validate` + `build:check`。コミット前に実行する |
+| `npm run export:m365 -- <dir>` | `m365-skill-pack` だけを本番用リポジトリとして書き出す。外部モデル・通信 API・許可外 URL を検査し、見つかれば書かない。`--check` でずれを検査 |
 | `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト、`m365-emu` の一巡。Python が PATH に無ければ Python のテストはスキップ) |
 | `node tools/m365-emu/run.mjs` | `m365-skill-pack` の Microsoft 365 側を模擬し、練習用フィクスチャで一巡させて採点する。エージェント役は opencode と無料モデル(既定、`m365-emu.bat`)か、人が Microsoft 365 Copilot に手で運ぶ手動ドライバ(`--driver manual`、`m365-emu-manual.bat`)。手動ドライバでは、スクリプトが実装セッションとレビューセッションの間を回す外部ループ(`--loop external`、`m365-emu-loop.bat`)も使える。手引きは [tools/m365-emu/README.md](tools/m365-emu/README.md) |
 
