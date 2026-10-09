@@ -239,4 +239,5 @@ harness:                  # 任意。ハーネスごとの逃げ道
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE)。ただし [`m365-org-skills/third-party/`](m365-org-skills/third-party/) の公開スキル(と `_upstream/` の写し)は
+元のリポジトリのライセンスに従う。どのライセンスが適用されるかは [`m365-org-skills/third-party/README.md`](m365-org-skills/third-party/README.md) に書いた。

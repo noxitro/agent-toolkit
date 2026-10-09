@@ -54,7 +54,8 @@ node m365-org-skills/scout/scout.mjs scan --keyword "議事録 meeting incident 
 
 取得したリポジトリは `artifacts/skill-scout/cache/node_modules/<リポジトリ名>` に置く。この道具は中のものを**一切実行しない**。
 `node_modules` の下に置くのは、`npm test`(`node --test`)が取得物の中の `test-*.js` などをテストと間違えて実行しないため
-(実際に一度起きた)。シンボリック リンクやサブモジュール、実行属性の付いたファイルは取り込まずに検査結果に出す。
+(実際に一度起きた)。git 上でシンボリック リンクやサブモジュールになっているものは取り込まずに検査結果に出す。
+実行属性の付いたファイルは、検査結果に参考として出す(取り込みは止めない。この道具はどのファイルも実行しない)。
 
 検査に使う語句(人に関わる判断の語句、読み替えが要る語句、サンドボックスに無い CLI ツール)は
 [`checks.json`](../../shared/skills/m365-skill-convert/scripts/lib/checks.json) で直せる(変換ツールと共通。自分用に変えるときは写しを作って `--checks <ファイル>` で渡す)。
@@ -117,6 +118,8 @@ node m365-org-skills/scout/scout.mjs adopt incident-postmortem create-specificat
 8 個までなので、それを超えると注意が出る。
 ZIP には元の LICENSE(`LICENSE.txt`)と出典(`SOURCE.md`: リポジトリ・コミット・変更点)が入る。MIT や Apache-2.0 は、
 この著作権表示と許諾表示を同梱することが利用の条件になっている。
+ZIP は `artifacts/skill-scout/zips/` に、ZIP の中身(人が全文読むためのもの)は `artifacts/skill-scout/node_modules/packages/<名前>/` にできる。
+`node_modules` の下に置くのは、取得物と同じく、上流のスクリプトがテストの自動実行に拾われないため。
 
 ### 6. 試す
 

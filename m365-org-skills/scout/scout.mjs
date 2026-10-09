@@ -57,7 +57,9 @@ const HELP = `
   --overlays <ファイル>  自分用の取り込み定義(既定: <作業フォルダ>/overlays.json)
 
 作業フォルダの中身: cache/node_modules/(取得したリポジトリ) report.md report.json overlays.json
-                    packages/(取り込んだスキル) zips/(Agent Builder に追加する ZIP)
+                    node_modules/packages/(取り込んだスキル) zips/(Agent Builder に追加する ZIP)
+                    (取得物と取り込んだスキルは node_modules の下に置く。npm test などのテストの
+                    自動実行が、上流のファイルをテストと間違えて実行しないため)
 
 レポートは機械による下調べ。採用するスキルは、SKILL.md と同梱するすべてのファイルを
 人が全文読んでから使うこと。
@@ -67,13 +69,17 @@ class UserError extends Error {}
 
 function paths(opts) {
   const dir = resolve(opts.dir ?? join(REPO, 'artifacts', 'skill-scout'))
+  // Upstream files (scripts included) are only ever written below a folder named
+  // node_modules: the clones (cache/node_modules/) and the imported packages
+  // (node_modules/packages/). Test runners that discover files on their own (node --test,
+  // Jest, pytest) skip node_modules, so `npm test` cannot run an upstream test-*.js.
   return {
     dir,
     cache: join(dir, 'cache'),
     reportMd: join(dir, 'report.md'),
     reportJson: join(dir, 'report.json'),
     overlays: resolve(opts.overlays ?? join(dir, 'overlays.json')),
-    packages: join(dir, 'packages'),
+    packages: join(dir, 'node_modules', 'packages'),
     zips: join(dir, 'zips'),
     sources: resolve(opts.sources ?? join(HERE, 'sources.json')),
     checks: resolve(opts.checks ?? join(CONVERT_LIB, 'checks.json')),
@@ -325,6 +331,17 @@ function cmdBuild(opts) {
     return 1
   }
 
+  // Earlier versions wrote the packages to <dir>/packages/, where `node --test` finds
+  // upstream scripts. Remove that folder when it holds only what build wrote there.
+  const oldPackages = join(p.dir, 'packages')
+  if (existsSync(oldPackages)) {
+    const ours = readdirSync(oldPackages, { withFileTypes: true }).every((e) => (e.isDirectory() && (e.name === '_upstream' || existsSync(join(oldPackages, e.name, 'SOURCE.md')))))
+    if (ours) {
+      rmSync(oldPackages, { recursive: true, force: true })
+      console.log(`古い場所の取り込み結果 ${oldPackages} を消しました(今は ${p.packages} に置きます)。`)
+    } else console.error(`注意: ${oldPackages} に取り込み結果以外のものがあるので残しました。中のスクリプトがテストの自動実行に拾われないよう、要らなければ消してください。`)
+  }
+
   let done
   try {
     done = importUpstream({ src: clonesDir(p.cache), overlays: p.overlays, out: p.packages })
@@ -379,7 +396,7 @@ function cmdBuild(opts) {
   const ok = results.filter((r) => r.ok).length
   console.log(`\nZIP: ${ok} 個 -> ${p.zips}`)
   if (ok > LIMITS.skillsPerAgent) console.log(`注意: 1 つのエージェントに入れられるスキルは ${LIMITS.skillsPerAgent} 個までです。`)
-  console.log('Agent Builder の「スキル」→「追加」で ZIP を 1 個ずつ追加します。追加する前に、packages/ の中身を人が全文読んでください。')
+  console.log(`Agent Builder の「スキル」→「追加」で ZIP を 1 個ずつ追加します。追加する前に、${p.packages} の中身を人が全文読んでください。`)
   return ok === results.length ? 0 : 1
 }
 

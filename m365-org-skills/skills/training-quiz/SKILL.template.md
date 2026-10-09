@@ -31,11 +31,13 @@ description: 研修資料(Word / PowerPoint / PDF / テキスト)から理解度
 4. **問題を作る**(下の「出題ルール」に従う)。
 5. **検証して CSV にする**:問題を次の形の `quiz.json` に保存し、
    `python3 scripts/quiz_to_csv.py quiz.json --csv quiz.csv --forms-text quiz-forms.txt` を実行する。
+
    ```json
    {"title": "〇〇研修 理解度テスト", "questions": [
      {"type": "選択式", "difficulty": "易", "question": "…", "choices": ["…", "…", "…", "…"],
       "answer": "正解の選択肢の文言", "explanation": "…", "source": "スライド3"}]}
    ```
+
    `type` は 選択式 / ○× / 記述、`difficulty` は 易 / 中 / 難。○× の `answer` は ○ か ×、記述の `answer` は模範解答(採点の観点を含めてよい)。
    - エラーが出たら内容を直して再実行する(エラーのある間はファイルが作られない)。「注意」は該当問題を見直す。
 

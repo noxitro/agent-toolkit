@@ -62,6 +62,7 @@ python-docx や openpyxl などを前提にするものがあり、それを採�
   読み替えの中身: 回答は日本語、リポジトリへの保存はファイルで返す形に、社内システムには接続しない、資料に無い担当者や期限を作らない、など。
   節の文面は [`third-party/overlays.json`](third-party/overlays.json) にある。
 - 各スキルに `LICENSE.txt`(元のリポジトリの LICENSE そのまま)と `SOURCE.md`(取り込んだコミットと変更点)を同梱する。
+  `third-party/` はリポジトリの MIT ライセンスの対象ではなく、元のリポジトリのライセンスに従う(対応表は [`third-party/README.md`](third-party/README.md))。
 - `third-party/_upstream/` は元の `SKILL.md` の写し。上流が更新されたときの差分確認に使う(ZIP には入らない)。
 - 評価の記録(採用しなかったものと理由を含む)は [external-skills.md](external-skills.md)。
 - **新しく公開スキルを探して ZIP にする手順と道具**は [scout/README.md](scout/README.md)(スキル スカウト)。誰でも同じ手順で、

@@ -38,6 +38,10 @@ export { nestedFrontmatterKeys } from '../../shared/skills/m365-skill-convert/sc
 const HERE = dirname(fileURLToPath(import.meta.url))
 const THIRD_PARTY = resolve(HERE, '..', 'third-party')
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
+// Files that `node --test` (and similar runners) discover and run on their own: *.test.js,
+// *-test.js, *_test.js, test-*.js, test.js and anything under a test/ folder, for the
+// JavaScript and TypeScript extensions Node runs.
+const TEST_RUNNER_RE = /(^|\/)test\/.*\.[cm]?[jt]s$|(^|\/)(test-[^/]*|[^/]*[._-]test|test)\.[cm]?[jt]s$/i
 
 const HELP = `
 使い方: node import-upstream.mjs --src <フォルダ> [--overlays <ファイル>] [--out <フォルダ>] [--only 名前,...]
@@ -221,6 +225,14 @@ export function importUpstream({ src, overlays = join(THIRD_PARTY, 'overlays.jso
 
   // Check every input of every selected skill before any existing package is touched.
   const prepared = cfg.skills.filter((s) => !onlySet.size || onlySet.has(s.name)).map((s) => prepare(s, cfg, src))
+
+  // Upstream scripts land in `out`. Outside a node_modules folder (the default is the
+  // committed third-party/ folder) a file a test runner discovers would be run by `npm test`.
+  const underNodeModules = resolve(out).split(sep).includes('node_modules')
+  if (!underNodeModules) {
+    const hits = prepared.flatMap((p) => p.skill.files.filter((f) => TEST_RUNNER_RE.test(f)).map((f) => `${p.name}/${f}`))
+    if (hits.length) fail(`テストの自動実行 (node --test など) が拾うファイル名なので、${out} には取り込みません: ${hits.join(', ')}(node_modules の下に出力するか、files から外す)`)
+  }
 
   const done = []
   for (const p of prepared) {

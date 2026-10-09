@@ -1,7 +1,8 @@
 @echo off
 rem Builds Agent Builder skill zips from the skills adopted with "scout.mjs adopt"
 rem (double-click to run). Reads <repo>\artifacts\skill-scout\overlays.json and writes
-rem packages\ and zips\ next to it. Refuses while any TODO is left in overlays.json.
+rem node_modules\packages\ and zips\ next to it (packages under node_modules so test
+rem runners never pick up upstream scripts). Refuses while any TODO is left in overlays.json.
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0..\.."

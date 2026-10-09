@@ -5,6 +5,7 @@
 //
 //   node skill2zip.mjs <input> [--out <dir>] [--overlay ja|none] [--overlay-file <json>]
 //                      [--origin own|third-party] [--draft] [--force] [--allow-license-unknown]
+//                      [--name <skill name>] [--max-depth <n>] [--checks <json>]
 //
 // <input>: a local skill folder (or its SKILL.md), a GitHub folder URL
 // (https://github.com/<owner>/<repo>/tree/<ref>/<path>, or .../blob/<ref>/<path>/SKILL.md),
@@ -13,7 +14,8 @@
 //
 // Needs Node 20+ (and git for GitHub input). Nothing from the input is executed; the
 // source folder is never written. Exit codes: 0 zip written, 1 stopped (see the report),
-// 2 bad arguments or unusable input.
+// 2 bad arguments or unusable input. When a report was written, the last line of stdout is
+// "REPORT: <path>" (skill2zip.bat opens that file).
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -24,6 +26,7 @@ import { renderConvertReport } from './lib/convert-report.mjs'
 import { ConvertError, convert, overlaps } from './lib/convert.mjs'
 import { GitError } from './lib/git.mjs'
 import { InputError, resolveInput } from './lib/input.mjs'
+import { PathError, SKILL_NAME_MAX, inside, validSkillName } from './lib/paths.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -44,6 +47,8 @@ const HELP = `
   --force                     機械チェックで止まる理由があっても作る(理由はレポートと SOURCE.md に残る)
   --allow-license-unknown     自作のスキルで LICENSE が無くても続ける
   --checks <ファイル>         チェックの語句(既定: このスクリプトの lib/checks.json)
+  --name <名前>               ZIP のスキル名(frontmatter の name を置き換える。name が規則に合わないときに使う)
+  --max-depth <n>             フォルダの深さの上限(既定 2。Agent Builder の文書の「3」をそのまま使うなら 3)
 
 出力: <出力先>/<名前>.zip、<名前>.report.md(日本語のレポート)、node_modules/<名前>/(ZIP と同じ中身)。
 第三者のスキルの ZIP には LICENSE.txt と SOURCE.md(出どころ・版・変更点)が入る。
@@ -55,7 +60,7 @@ function main(argv) {
   try {
     parsed = parseArgs(argv, {
       out: 'string', overlay: 'string', 'overlay-file': 'string', origin: 'string', draft: 'bool', force: 'bool',
-      'allow-license-unknown': 'bool', checks: 'string', help: 'bool',
+      'allow-license-unknown': 'bool', checks: 'string', name: 'string', 'max-depth': 'number', help: 'bool',
     })
   } catch (e) {
     console.error(`エラー: ${e.message}\n${HELP.trim()}`)
@@ -76,6 +81,15 @@ function main(argv) {
   }
   if (opts.origin && !['own', 'third-party'].includes(opts.origin)) {
     console.error('エラー: --origin は own か third-party です')
+    return 2
+  }
+  if (opts.name !== undefined && !validSkillName(opts.name)) {
+    console.error(`エラー: --name は英小文字・数字を 1 個ずつのハイフンでつないだ ${SKILL_NAME_MAX} 文字以内の名前にしてください(例: meeting-notes)`)
+    return 2
+  }
+  const maxDepth = opts['max-depth']
+  if (maxDepth !== undefined && (!Number.isInteger(maxDepth) || maxDepth < 0)) {
+    console.error('エラー: --max-depth は 0 以上の整数です')
     return 2
   }
 
@@ -104,14 +118,17 @@ function main(argv) {
       force: opts.force,
       allowLicenseUnknown: opts['allow-license-unknown'],
       checksPath: resolve(opts.checks ?? join(HERE, 'lib', 'checks.json')),
+      name: opts.name,
+      maxDepth,
     })
     const originWhy = opts.origin ? '--origin で指定' : input.kind === 'github' ? 'GitHub から取得したので第三者のものとして扱う。自作なら --origin own' : 'ローカルのスキルなので自作として扱う。他人が作ったものなら --origin third-party'
     const command = ['node', 'skill2zip.mjs', ...argv.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(' ')
-    const report = join(out, `${r.name}.report.md`)
+    const report = inside(out, `${r.name}.report.md`)
     mkdirSync(out, { recursive: true })
     writeFileSync(report, renderConvertReport(r, { originWhy, command }))
 
     console.log(`判定(機械チェック): ${r.verdict}`)
+    for (const a of r.attention) console.log(`  先に確認(置き換わらない変数): ${a}`)
     for (const b of r.stopping) console.error(`  止めた理由: ${b}`)
     for (const p of r.hardProblems) console.error(`  直せない問題: ${p}`)
     for (const f of r.forced) console.log(`  --force で通した: ${f}`)
@@ -121,9 +138,11 @@ function main(argv) {
     console.log(`レポート: ${report}`)
     if (r.staged) console.log(`中身(ZIP と同じ): ${r.staged}`)
     console.log('これは機械による下調べです。使う前に、SKILL.md と同梱ファイルを人が全文読んでください。')
+    // Machine-readable last line: skill2zip.bat opens exactly this file.
+    console.log(`REPORT: ${report}`)
     return r.zip ? 0 : 1
   } catch (e) {
-    if (e instanceof ConvertError || e instanceof ConfigError || e instanceof GitError) {
+    if (e instanceof ConvertError || e instanceof ConfigError || e instanceof GitError || e instanceof PathError) {
       console.error(`エラー: ${e.message}`)
       return 2
     }

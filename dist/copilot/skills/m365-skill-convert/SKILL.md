@@ -15,7 +15,7 @@ the OS temp folder and deleted afterwards.
 ## 1. Run the converter
 
 ```bash
-node <skill-dir>/scripts/skill2zip.mjs <folder | GitHub folder URL | installed skill name> [--out <dir>]
+node <skill-dir>/scripts/skill2zip.mjs <folder | GitHub folder URL | installed skill name> [--out <dir>] [--name <name>]
 ```
 
 It writes into `./m365-zips/` (or `--out`): `<name>.zip`, `<name>.report.md` (Japanese),
@@ -31,6 +31,14 @@ Defaults: GitHub input is treated as third-party (overlay on, `LICENSE.txt` and
 
 `--force` (continue despite blockers) and `--allow-license-unknown` (own skill without a
 license) are the user's decisions after reading the reasons. Do not add them on your own.
+
+A frontmatter `name` that is not a valid skill name (lowercase letters, digits and single
+hyphens, at most 64 characters) stops the conversion even with `--force`; output file
+names never use it. Propose a name and rerun with `--name <name>` once the user agrees.
+`--max-depth 3` relaxes the folder depth limit (default 2). Variables that nothing
+replaces in Microsoft 365 (`$ARGUMENTS`, `${CLAUDE_...}`, `${input:...}`) do not stop the
+conversion; they are listed first in the report - always mention them to the user.
+The last stdout line is `REPORT: <path>` whenever a report was written.
 
 ## 2. Read everything, then report to the user
 

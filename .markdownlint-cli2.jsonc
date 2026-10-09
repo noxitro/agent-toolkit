@@ -7,5 +7,7 @@
     "MD033": false, // inline HTML: generated files carry an HTML banner comment
     "MD041": false  // first line: frontmatter precedes the first heading
   },
-  "ignores": ["node_modules", "dist", "plugins/*/skills", "plugins/*/commands", "plugins/*/agents"]
+  // m365-org-skills/third-party/<skill>/ and _upstream/ hold upstream text kept verbatim (and the
+  // packages generated from it); only third-party/README.md there is ours.
+  "ignores": ["node_modules", "dist", "plugins/*/skills", "plugins/*/commands", "plugins/*/agents", "m365-org-skills/third-party/*/**"]
 }

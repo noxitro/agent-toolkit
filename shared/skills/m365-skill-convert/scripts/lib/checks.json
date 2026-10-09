@@ -6,6 +6,7 @@
     "harness: text written for another tool that needs a 読み替え (要書き換え).",
     "cliTools: command-line tools that the Microsoft 365 sandbox does not have (不可).",
     "claudeOnly (harness entries): a Claude Code feature the sandbox cannot honour. The scout keeps it as 要書き換え; the converter (m365-skill-convert/scripts/skill2zip.mjs) stops on it unless --force.",
+    "attention (harness entries): a variable that nothing replaces in Microsoft 365. Not a stop reason; the converter lists it at the top of its report and in its console summary.",
     "Used by both the scout (m365-org-skills/scout) and the converter; this file is the single copy."
   ],
   "privacy": [
@@ -35,12 +36,12 @@
     }
   ],
   "harness": [
-    { "label": "${input:...} の変数", "pattern": "\\$\\{input:" },
-    { "label": "${selection} などのエディタ変数", "pattern": "\\$\\{(selection|selectedText|file|workspaceFolder)\\}" },
+    { "label": "${input:...} の変数", "pattern": "\\$\\{input:", "attention": true },
+    { "label": "${selection} などのエディタ変数", "pattern": "\\$\\{(selection|selectedText|file|workspaceFolder)\\}", "attention": true },
     { "label": "docs/ などへの保存指示", "pattern": "(save|write|create|store|place|output)[^\\n]{0,40}\\b(docs?|documentation)/" },
     { "label": "claude -p の呼び出し", "pattern": "\\bclaude\\s+-p\\b", "claudeOnly": true },
     { "label": "サブエージェント", "pattern": "\\bsub-?agents?\\b|\\bTask tool\\b", "claudeOnly": true },
-    { "label": "$ARGUMENTS / ${CLAUDE_...} などの Claude Code の変数", "pattern": "\\$ARGUMENTS\\b|\\$\\{CLAUDE_[A-Z_]+\\}", "flags": "" },
+    { "label": "$ARGUMENTS / ${CLAUDE_...} などの Claude Code の変数", "pattern": "\\$ARGUMENTS\\b|\\$\\{CLAUDE_[A-Z_]+\\}", "flags": "", "attention": true },
     { "label": "MCP / コネクタの ~~ プレースホルダー", "pattern": "~~[A-Za-z][\\w-]*(?![^\\n]*~~)" },
     { "label": "MCP サーバー前提", "pattern": "\\bMCP\\b", "flags": "" },
     { "label": "Slack", "pattern": "\\bSlack\\b", "flags": "" },

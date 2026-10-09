@@ -76,3 +76,4 @@ jobs:
             !plugins/*/skills
             !plugins/*/commands
             !plugins/*/agents
+            !m365-org-skills/third-party/*/**

@@ -4,6 +4,8 @@ rem into a Microsoft 365 Copilot (Agent Builder) skill zip. Double-click and typ
 rem URL, or drag a skill folder onto this file. Writes <repo>\artifacts\m365-zips\ and opens
 rem the Japanese report. Extra options after the first argument are passed through
 rem (for example: skill2zip.bat <url> --draft). Nothing from the skill is executed.
+rem The report opened is the one named on the converter's last line ("REPORT: <path>"),
+rem and only when the converter wrote one (exit code 0 or 1).
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0.."
@@ -23,8 +25,11 @@ echo   - スキルのフォルダのパス(直下に SKILL.md があるもの。
 echo   - GitHub のフォルダの URL(https://github.com/^<owner^>/^<repo^>/tree/^<ブランチ^>/^<パス^>)
 echo   - インストール済みのスキルの名前
 set /p "IN=> "
+rem Just Enter leaves IN undefined; stripping quotes from an undefined variable would
+rem leave junk in it, so stop before that.
+if not defined IN goto :end
 set "IN=%IN:"=%"
-if "%IN%"=="" goto :end
+if not defined IN goto :end
 
 :run
 rem Pass through any options given after the first argument.
@@ -38,16 +43,18 @@ goto :collect
 
 :convert
 echo.
-node "%CONVERT%" "%IN%" --out "%OUT%" %REST%
+rem The output goes through a log file so the report path can be read from its last line.
+set "LOG=%TEMP%\skill2zip-%RANDOM%%RANDOM%.log"
+node "%CONVERT%" "%IN%" --out "%OUT%" %REST% > "%LOG%" 2>&1
 set CODE=%ERRORLEVEL%
-if "%CODE%"=="2" goto :failed
-
-rem Open the newest report (the one just written).
-for /f "delims=" %%F in ('dir /b /o-d "%OUT%\*.report.md" 2^>nul') do (
-  start "" "%OUT%\%%F"
-  goto :opened
-)
-:opened
+type "%LOG%"
+set "REPORT="
+for /f "usebackq tokens=1,* delims= " %%A in (`findstr /b /c:"REPORT: " "%LOG%"`) do set "REPORT=%%B"
+del "%LOG%" >nul 2>nul
+if not "%CODE%"=="0" if not "%CODE%"=="1" goto :failed
+rem Exit code 1 without a report line is a crash, not a stopped conversion.
+if not defined REPORT goto :failed
+if defined REPORT if exist "%REPORT%" start "" "%REPORT%"
 echo.
 if "%CODE%"=="0" (
   echo ZIP は %OUT% にあります。Agent Builder に追加する前に、レポートと中身を全文読んでください。

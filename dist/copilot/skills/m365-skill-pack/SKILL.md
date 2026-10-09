@@ -1,6 +1,6 @@
 ---
 name: m365-skill-pack
-description: Use when a coding task should be delegated to Microsoft 365 Copilot custom agents (Agent Builder) instead of being done here - packaging skill .zip files for Agent Builder, writing _m365/TASK.md, building the input bundle of a repository, or ingesting the output bundle that comes back from the impl-loop or auditor agent. Also use when asked to validate a Microsoft 365 skill package or an agent instruction block against the documented limits.
+description: Use when a coding task should be delegated to Microsoft 365 Copilot custom agents (Agent Builder) instead of being done here - packaging skill .zip files for Agent Builder, writing _m365/TASK.md, building the input bundle of a repository, or ingesting the output bundle that comes back from the impl-loop or auditor agent. Also use when asked to validate a Microsoft 365 skill package or an agent instruction block against the documented limits. Not for converting an existing agent skill (a local folder, a GitHub URL or an installed skill) into an Agent Builder zip - that is m365-skill-convert.
 ---
 
 <!-- Generated file - do not edit this copy; the next build overwrites it. It is generated from shared/skills/m365-skill-pack/SKILL.md in the agent-toolkit repository, which is not present alongside this file and must not be opened. -->

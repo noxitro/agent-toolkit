@@ -1,10 +1,2 @@
 # 公開スキルに同梱する MIT ライセンス本文。著作権表示は MIT の条件として残す必要がある(m365-org-skills/external-skills.md で確認済み)。
 m365-org-skills/third-party/root-cause-analysis/LICENSE.txt
-# スキルの検査(m365-skill-convert。スカウトも共有)がライセンス文を判定するための検出用の語句。元と、ビルドの生成物 2 か所。
-shared/skills/m365-skill-convert/scripts/lib/checks.mjs
-plugins/toolkit-core/skills/m365-skill-convert/scripts/lib/checks.mjs
-dist/copilot/skills/m365-skill-convert/scripts/lib/checks.mjs
-# スキル スカウトのテストが偽の上流リポジトリに置く、試験用のライセンス文。
-tests/m365-org-scout.test.mjs
-# m365-skill-convert のテストが偽のスキルに置く、試験用のライセンス文。
-tests/m365-skill-convert.test.mjs
