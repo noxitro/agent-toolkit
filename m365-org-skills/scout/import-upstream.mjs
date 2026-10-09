@@ -27,11 +27,16 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSy
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from '../../shared/skills/m365-skill-pack/scripts/lib/args.mjs'
-import { git, GitError } from './lib/git.mjs'
+import { git, GitError } from '../../shared/skills/m365-skill-convert/scripts/lib/git.mjs'
+import { ImportError, MARK_ORIGINAL, assembleSkillMd, fail, readText } from '../../shared/skills/m365-skill-convert/scripts/lib/overlay.mjs'
+
+// The overlay assembly lives in the m365-skill-convert skill (one copy for the scout and the
+// converter); re-exported here for existing callers.
+export { ImportError, assembleSkillMd, readText }
+export { nestedFrontmatterKeys } from '../../shared/skills/m365-skill-convert/scripts/lib/overlay.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const THIRD_PARTY = resolve(HERE, '..', 'third-party')
-const MARK_ORIGINAL = '## 原文'
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
 const HELP = `
@@ -43,170 +48,9 @@ const HELP = `
   --only <名前,...>      指定したスキルだけを取り込む
 `
 
-export class ImportError extends Error {}
-
-function fail(msg) {
-  throw new ImportError(msg)
-}
-
-// Python's str.strip() whitespace set (str.isspace), which differs from String#trim.
-const PY_SPACE = new Set([...' \t\n\r\x0b\x0c\x1c\x1d\x1e\x1f\x85\xa0                　'])
-function pyStrip(s) {
-  const cps = [...s]
-  let a = 0
-  let b = cps.length
-  while (a < b && PY_SPACE.has(cps[a])) a++
-  while (b > a && PY_SPACE.has(cps[b - 1])) b--
-  return cps.slice(a, b).join('')
-}
-
-const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
-
-/** Read UTF-8 text the way Python's open(encoding="utf-8") does: universal newlines. */
-export function readText(path, where) {
-  let text
-  try {
-    text = UTF8.decode(readFileSync(path))
-  } catch (e) {
-    fail(`${where}: ${path} は UTF-8 として読めません (${e.message})`)
-  }
-  return text.replace(/\r\n?/g, '\n')
-}
-
 function writeText(path, text) {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, text, 'utf8')
-}
-
-function splitFrontmatter(text, where) {
-  if (!text.startsWith('---\n')) fail(`${where}: YAML frontmatter がありません`)
-  const end = text.indexOf('\n---\n', 4)
-  if (end < 0) fail(`${where}: frontmatter が閉じていません`)
-  return [text.slice(4, end).split('\n'), text.slice(end + 5)]
-}
-
-// YAML double-quoted escapes. Line breaks and tabs become spaces: the result goes into a
-// one-line description.
-const DQ_ESC = { '\\': '\\', '"': '"', '/': '/', ' ': ' ', '\t': ' ', n: ' ', r: ' ', t: ' ', b: ' ', f: ' ', v: ' ', a: ' ', e: ' ', N: ' ', _: ' ', L: ' ', P: ' ' }
-function decodeDoubleQuoted(inner, where) {
-  let out = ''
-  for (let i = 0; i < inner.length; i++) {
-    const c = inner[i]
-    if (c === '"') fail(`${where}: description の引用符 (") が途中で閉じています。手で直してください`)
-    if (c !== '\\') {
-      out += c
-      continue
-    }
-    const e = inner[++i]
-    const hex = { x: 2, u: 4, U: 8 }[e]
-    if (hex) {
-      const h = inner.slice(i + 1, i + 1 + hex)
-      if (h.length !== hex || !/^[0-9A-Fa-f]+$/.test(h)) fail(`${where}: description のエスケープ \\${e}${h} が不正です`)
-      out += String.fromCodePoint(parseInt(h, 16))
-      i += hex
-    } else if (e !== undefined && Object.hasOwn(DQ_ESC, e)) out += DQ_ESC[e]
-    else fail(`${where}: description のエスケープ \\${e ?? ''} には対応していません。手で直してください`)
-  }
-  return out
-}
-
-function unquote(value, where) {
-  const v = pyStrip(value)
-  if (v.startsWith("'") && v.endsWith("'") && v.length >= 2) return v.slice(1, -1).replaceAll("''", "'")
-  // Double quotes were refused by the Python original, so this never changes the output
-  // for the existing overlays.
-  if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) return decodeDoubleQuoted(v.slice(1, -1), where)
-  if (v.startsWith('"') || ['>', '|'].includes(v.slice(0, 1)) || v.includes(' #')) {
-    fail(`${where}: description の書き方 ${JSON.stringify(v.slice(0, 1))} には対応していません。手で直してください`)
-  }
-  return v
-}
-
-/** Index of the last line that belongs to the key on lines[i] (indented continuation, blank lines inside). */
-function endOfEntry(lines, i) {
-  let j = i
-  for (let k = i + 1; k < lines.length; k++) {
-    if (lines[k].startsWith(' ') || lines[k].startsWith('\t')) j = k
-    else if (lines[k] !== '') break
-  }
-  return j
-}
-
-/** Description from its first line and continuation lines; a multi-line value is joined into one line. */
-function descriptionValue(head, cont, where) {
-  if (!cont.length) return { value: unquote(head, where), flattened: false }
-  const v = pyStrip(head)
-  const rest = cont.map((l) => pyStrip(l)).filter(Boolean)
-  if (/^[>|][-+0-9]*$/.test(v)) return { value: rest.join(' '), flattened: true }
-  if (/^[>|]/.test(v)) fail(`${where}: description の書き方 ${JSON.stringify(v)} には対応していません。手で直してください`)
-  return { value: unquote([v, ...rest].join(' '), where), flattened: true }
-}
-
-const KEY_RE = /^([A-Za-z0-9_-]+):/
-
-function frontmatterLines(original) {
-  const text = original.replace(/\r\n?/g, '\n')
-  if (!text.startsWith('---\n')) return null
-  const end = text.indexOf('\n---\n', 4)
-  return end < 0 ? null : text.slice(4, end).split('\n')
-}
-
-/** Top-level frontmatter keys other than name/description whose value spans indented lines. */
-export function nestedFrontmatterKeys(original) {
-  const lines = frontmatterLines(original) ?? []
-  const keys = []
-  for (let i = 0; i < lines.length; i++) {
-    const key = KEY_RE.exec(lines[i])?.[1]
-    if (!key) continue
-    const j = endOfEntry(lines, i)
-    if (j > i && key !== 'description' && key !== 'name') keys.push(key)
-    i = j
-  }
-  return keys
-}
-
-function rebuildFrontmatter(lines, skill, where) {
-  const triggerJa = skill.trigger_ja ?? ''
-  const drop = new Set(skill.drop_frontmatter ?? [])
-  if (drop.has('name') || drop.has('description')) fail(`${where}: drop_frontmatter に name / description は指定できません`)
-  const missing = [...drop].filter((k) => !lines.some((l) => KEY_RE.exec(l)?.[1] === k))
-  if (missing.length) fail(`${where}: drop_frontmatter の ${missing.join(', ')} が frontmatter にありません`)
-  const out = []
-  const notes = []
-  let seen = false
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const key = KEY_RE.exec(line)?.[1]
-    if (key && drop.has(key)) {
-      i = endOfEntry(lines, i)
-      notes.push(`- \`SKILL.md\` の frontmatter から \`${key}\` を外した(Agent Builder 向けの検査が読めない形のため。原文は \`_upstream/\` に残る)。`)
-      continue
-    }
-    if (line.startsWith('description:')) {
-      const j = endOfEntry(lines, i)
-      const { value, flattened } = descriptionValue(line.slice('description:'.length), lines.slice(i + 1, j + 1), where)
-      const desc = pyStrip(value + ' ' + triggerJa)
-      out.push("description: '" + desc.replaceAll("'", "''") + "'")
-      if (flattened) notes.push('- `SKILL.md` の複数行の description を 1 行にまとめた。')
-      seen = true
-      i = j
-    } else out.push(line)
-  }
-  if (!seen) fail(`${where}: frontmatter に description がありません`)
-  return { lines: out, notes }
-}
-
-/**
- * The package SKILL.md for an upstream SKILL.md: frontmatter with the Japanese trigger
- * words, the 読み替え section, then the original body untouched. The scout uses it to
- * pre-check what an import would produce.
- */
-export function assembleSkillMd(original, skill, common, where = skill.name) {
-  const [fmLines, body] = splitFrontmatter(original.replace(/\r\n?/g, '\n'), where)
-  const fm = rebuildFrontmatter(fmLines, skill, where)
-  const overlay = common.join('\n') + (skill.extra && skill.extra.length ? '\n' + skill.extra.join('\n') : '')
-  const text = '---\n' + fm.lines.join('\n') + '\n---\n\n' + overlay + '\n\n' + MARK_ORIGINAL + '\n\n' + body.replace(/^\n+/, '')
-  return { text, notes: fm.notes }
 }
 
 function isLink(p) {

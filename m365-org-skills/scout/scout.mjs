@@ -19,14 +19,17 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from '../../shared/skills/m365-skill-pack/scripts/lib/args.mjs'
 import { LIMITS } from '../../shared/skills/m365-skill-pack/scripts/lib/m365-rules.mjs'
 import { ImportError, importUpstream } from './import-upstream.mjs'
-import { LEVEL_LABEL, analyzeSkill, findSkillDirs, loadChecks } from './lib/checks.mjs'
-import { GitError, MODE_LABEL } from './lib/git.mjs'
+import { LEVEL_LABEL, analyzeSkill, findSkillDirs, loadChecks } from '../../shared/skills/m365-skill-convert/scripts/lib/checks.mjs'
+import { GitError, MODE_LABEL } from '../../shared/skills/m365-skill-convert/scripts/lib/git.mjs'
+import { TODO_EXTRA, TODO_TRIGGER, defaultCommon, harnessTodoLines, hasTodo } from '../../shared/skills/m365-skill-convert/scripts/lib/overlay.mjs'
 import { renderReport, sortRecords } from './lib/report.mjs'
 import { ConfigError, cloneDir, clonesDir, fetchSource, loadSources, readJson, readMeta } from './lib/sources.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..', '..')
-const THIRD_PARTY_OVERLAYS = join(REPO, 'm365-org-skills', 'third-party', 'overlays.json')
+// The checks, the safe clone and the overlay assembly are shared with the skill converter
+// and live in its skill folder (one copy).
+const CONVERT_LIB = join(REPO, 'shared', 'skills', 'm365-skill-convert', 'scripts', 'lib')
 const PACKER = join(REPO, 'shared', 'skills', 'm365-skill-pack', 'scripts', 'pack-skill.mjs')
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 const SELF = 'node m365-org-skills/scout/scout.mjs'
@@ -50,7 +53,7 @@ const HELP = `
 共通のオプション:
   --dir <フォルダ>       作業フォルダ(既定: <リポジトリ>/artifacts/skill-scout)
   --sources <ファイル>   取得元の一覧(既定: m365-org-skills/scout/sources.json)
-  --checks <ファイル>    チェックの語句(既定: m365-org-skills/scout/checks.json)
+  --checks <ファイル>    チェックの語句(既定: shared/skills/m365-skill-convert/scripts/lib/checks.json)
   --overlays <ファイル>  自分用の取り込み定義(既定: <作業フォルダ>/overlays.json)
 
 作業フォルダの中身: cache/node_modules/(取得したリポジトリ) report.md report.json overlays.json
@@ -73,7 +76,7 @@ function paths(opts) {
     packages: join(dir, 'packages'),
     zips: join(dir, 'zips'),
     sources: resolve(opts.sources ?? join(HERE, 'sources.json')),
-    checks: resolve(opts.checks ?? join(HERE, 'checks.json')),
+    checks: resolve(opts.checks ?? join(CONVERT_LIB, 'checks.json')),
   }
 }
 
@@ -84,7 +87,7 @@ function selectSources(all, only) {
   return s
 }
 
-const common = () => readJson(THIRD_PARTY_OVERLAYS, 'third-party/overlays.json').common
+const common = () => defaultCommon()
 
 // --------------------------------------------------------------------- fetch
 
@@ -165,9 +168,6 @@ function cmdScan(opts) {
 
 // --------------------------------------------------------------------- adopt
 
-const TODO_TRIGGER = 'TODO: 日本語での依頼例(例: 「〜を作って」「〜をレビューして」)と、使わない場面(別のスキルを使う場面)を書く'
-const TODO_EXTRA = 'TODO: このスキルでの読み替えを書く(返すファイルの名前、接続できないサービスの言い換え、原文の例が当てはまらないときの扱いなど)。書き終えたらこの行を消す'
-
 function loadOverlays(file) {
   if (!existsSync(file)) return null
   const cfg = readJson(file, 'overlays.json')
@@ -235,7 +235,7 @@ function cmdAdopt(opts, names) {
       refused++
       continue
     }
-    const hints = reasons.filter((f) => f.level === 'rewrite' && f.check === 'harness').map((f) => `TODO: ${f.msg.replace(/^読み替えが要る: /, '')} を読み替える(例: 「添付・貼り付けで受け取る」「Teams・Outlook に言い換える」)。書き終えたらこの行を消す`)
+    const hints = harnessTodoLines(reasons)
     const entry = {
       name,
       repo: r.repo,
@@ -287,12 +287,6 @@ function readdirSyncSafe(dir, prefix = '') {
 }
 
 // --------------------------------------------------------------------- build
-
-function hasTodo(v) {
-  if (typeof v === 'string') return /TODO/.test(v)
-  if (Array.isArray(v)) return v.some(hasTodo)
-  return false
-}
 
 function cmdBuild(opts) {
   const p = paths(opts)

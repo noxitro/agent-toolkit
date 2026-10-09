@@ -1,5 +1,6 @@
-// Machine pre-screen of one upstream skill folder. Everything here reads files; nothing
-// from the upstream clone is executed or imported. The result is a list of findings, each
+// Machine pre-screen of one skill folder, shared by the skill scout (m365-org-skills/scout)
+// and the converter (skill2zip.mjs next to this folder). Everything here reads files;
+// nothing from the skill is executed or imported. The result is a list of findings, each
 // with a level that decides the verdict:
 //
 //   block  -> 不可       (license, Windows scripts, required CLI tools, network, hard limits)
@@ -12,10 +13,10 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { join, posix } from 'node:path'
 import {
   LIMITS, RESOURCE_EXT, SCRIPT_EXT, WINDOWS_SCRIPT_EXT, extOf, globToRegExp, parseSimpleFrontmatter, validateSkillDir,
-} from '../../../shared/skills/m365-skill-pack/scripts/lib/m365-rules.mjs'
-import { assembleSkillMd, nestedFrontmatterKeys } from '../import-upstream.mjs'
+} from './m365-rules.mjs'
+import { ConfigError, readJson } from './config.mjs'
+import { assembleSkillMd, nestedFrontmatterKeys } from './overlay.mjs'
 import { ADDED, REMOVED, STDLIB, WINDOWS_ONLY } from './python-stdlib.mjs'
-import { ConfigError, readJson } from './sources.mjs'
 
 export const VERDICTS = ['候補', '要書き換え', '要確認', '不可']
 const LEVEL_VERDICT = { block: '不可', review: '要確認', rewrite: '要書き換え' }
@@ -32,7 +33,9 @@ export function loadChecks(path) {
     (list ?? []).map((e) => {
       try {
         // A space in a pattern also matches a line break, so wrapped prose still matches.
-        return { label: e.label, re: new RegExp(e.pattern.replace(/ /g, '\\s+'), (e.flags ?? 'i').replace('g', '') + 'g') }
+        // claudeOnly: a feature the Microsoft 365 sandbox cannot honour; the converter treats
+        // it as a blocker, the scout keeps it as 要書き換え.
+        return { label: e.label, re: new RegExp(e.pattern.replace(/ /g, '\\s+'), (e.flags ?? 'i').replace('g', '') + 'g'), claudeOnly: e.claudeOnly === true }
       } catch (err) {
         throw new ConfigError(`${path}: ${key} の "${e.label}" の正規表現が不正です: ${err.message}`)
       }
@@ -469,7 +472,7 @@ function checkNetwork(ctx, add) {
 function checkHarness(ctx, add, checks) {
   for (const h of checks.harness) {
     const hits = scanPattern(ctx.textFiles, h.re, (f) => !SCRIPT_EXT.has(extOf(f.rel)))
-    if (hits.length) add('rewrite', 'harness', `読み替えが要る: ${h.label}(${where(hits)}: 「${short(hits[0].match, 30)}」)`)
+    if (hits.length) add('rewrite', 'harness', `読み替えが要る: ${h.label}(${where(hits)}: 「${short(hits[0].match, 30)}」)`, h.claudeOnly ? { claudeOnly: true } : undefined)
   }
 }
 
@@ -500,7 +503,7 @@ export function keywordScore(keywords, name, description) {
  */
 export function analyzeSkill({ clone, skillRel, source, meta, checks, common, keywords = [] }) {
   const findings = []
-  const add = (level, check, msg) => findings.push({ level, check, msg })
+  const add = (level, check, msg, extra) => findings.push({ level, check, msg, ...extra })
   const absDir = join(clone, ...skillRel.split('/'))
   const special = new Map((meta?.special ?? []).map((e) => [e.path, e.mode]))
 

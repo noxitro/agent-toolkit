@@ -1,7 +1,7 @@
 // Japanese Markdown report for `scout.mjs scan`. One row per skill, sorted by verdict,
 // then keyword score, then source and name; details for every skill follow the table.
 
-import { LEVEL_LABEL, VERDICTS } from './checks.mjs'
+import { LEVEL_LABEL, VERDICTS } from '../../../shared/skills/m365-skill-convert/scripts/lib/checks.mjs'
 
 const cell = (s) => String(s ?? '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
 const clip = (s, n) => {

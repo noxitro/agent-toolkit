@@ -6,6 +6,7 @@
 # fails in the Linux sandbox and SKILL.md must be UTF-8 without BOM.
 shared/skills/m365-skill-pack/m365/** text eol=lf
 shared/skills/m365-skill-pack/scripts/** text eol=lf
+shared/skills/m365-skill-convert/scripts/** text eol=lf
 m365-org-skills/skills/** text eol=lf
 m365-org-skills/third-party/** text eol=lf
 
