@@ -18,6 +18,14 @@ export function renderConvertReport(r, { originWhy, command }) {
   out.push('> 使う前に、`SKILL.md` と、同梱するすべてのファイル(references・scripts・assets など)を**人が全文読んでください**。')
   out.push('> スキルは AI への指示そのものです。外部への送信、不審な指示、社外サービス前提の手順が無いかを確かめてください。', '')
 
+  if (r.attention?.length) {
+    out.push('## 先に確認すること: 置き換わらない変数', '')
+    out.push('次の変数は Microsoft 365 Copilot では何にも置き換わらず、書いたまま AI に渡る。止める理由にはしていないが、')
+    out.push('このまま使うと手順が成り立たないことがある。`SKILL.md` を直すか、読み替え(`--overlay ja`)で受け取り方を書く。', '')
+    for (const a of r.attention) out.push(`- ${a}`)
+    out.push('')
+  }
+
   out.push('## 結果', '')
   out.push(`- ${status}`)
   const stale = (r.removedOld ?? []).filter((p) => p !== r.zip)
@@ -36,6 +44,7 @@ export function renderConvertReport(r, { originWhy, command }) {
     for (const b of r.stopping) out.push(`- ${b}`)
     for (const p of r.hardProblems) out.push(`- ${p}(--force でも変えられない。元のスキルを直す)`)
     const hints = []
+    if (!r.skillName) hints.push('スキル名は、元の `SKILL.md` の frontmatter の `name` を直すか、`--name <英小文字とハイフンの名前>` で指定する。')
     if (r.stopping.some((b) => /LICENSE が見つからない/.test(b)) && r.origin === 'own') hints.push('自作のスキルでライセンスを付けていないだけなら `--allow-license-unknown` で続けられる。')
     if (r.stopping.some((b) => !b.startsWith('読み替えに TODO'))) hints.push('理由を読んで納得できるものだけ `--force` で続けられる(第三者のスキルのライセンスが理由なら使わない)。')
     if (r.stopping.some((b) => b.startsWith('読み替えに TODO'))) hints.push(`\`${r.overlay.file}\` の TODO を書き換えてから、同じコマンドをもう一度実行する。試しに作るだけなら \`--draft\`。`)

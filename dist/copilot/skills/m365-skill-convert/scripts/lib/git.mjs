@@ -14,6 +14,9 @@ const SAFE_CONFIG = [
   '-c', 'core.fsmonitor=false',
   '-c', 'protocol.ext.allow=never',
   '-c', 'submodule.recurse=false',
+  // `git log` would otherwise verify signatures (running gpg.program) when a config sets
+  // log.showSignature. Only clones this code made are passed to git, but keep it off anyway.
+  '-c', 'log.showSignature=false',
 ]
 
 // MSYS_NO_PATHCONV / MSYS2_ARG_CONV_EXCL are deliberately not set: git.exe is spawned

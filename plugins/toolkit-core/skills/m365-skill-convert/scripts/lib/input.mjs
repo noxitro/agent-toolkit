@@ -2,13 +2,17 @@
 // an installed skill - to a folder on disk. GitHub input is fetched with the same safe
 // sparse shallow clone as the skill scout (lib/git.mjs) into a temp folder under the OS
 // temp directory, inside a folder named node_modules so test runners never pick it up.
-// Nothing found here is executed; local repositories are only asked for read-only facts
-// (index modes, origin URL, commit) with the safe git settings.
+// Nothing found here is executed. git is never started inside a local or installed input
+// (its .git/config could make git run programs): the facts the report needs - commit,
+// GitHub origin, index entries that are links or submodules - are read from the files
+// directly by local-git.mjs.
 
 import { existsSync, lstatSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { cloneSparse, git, isCommitId, remoteRefs, sparsePatterns, specialEntries } from './git.mjs'
+import { readLocalRepo } from './local-git.mjs'
+import { strictlyInside } from './paths.mjs'
 
 export class InputError extends Error {}
 
@@ -25,13 +29,29 @@ export function parseGitHubUrl(input) {
   if (!m) return null
   const [, owner, repo, kind, restRaw] = m
   if ([owner, repo].some((p) => p === '.' || p === '..')) return null
-  let rest = restRaw ? decodeURIComponent(restRaw) : ''
-  if (kind === 'blob') {
-    if (!/(^|\/)SKILL\.md$/.test(rest)) throw new InputError(`GitHub の blob の URL は SKILL.md を指すものだけ使えます: ${input}`)
-    rest = rest.replace(/\/?SKILL\.md$/, '')
+  // Split on "/" first, then decode each segment, so an encoded separator (%2F, %5C) or an
+  // encoded dot segment cannot slip past the checks. The parts become a path inside the
+  // clone joined with the OS separator, so anything that could leave the clone on Windows
+  // or POSIX is refused: slashes and backslashes inside a segment, drive colons, NUL and
+  // control characters, empty, "." and ".." segments.
+  const raw = restRaw ? restRaw.split('/') : []
+  const parts = []
+  for (const [i, seg] of raw.entries()) {
+    if (seg === '' && i === raw.length - 1) continue
+    let p
+    try {
+      p = decodeURIComponent(seg)
+    } catch {
+      throw new InputError(`URL の % の書き方が不正です: ${input}`)
+    }
+    if (p === '' || p === '.' || p === '..' || /[\\/:\x00-\x1f\x7f]/.test(p)) throw new InputError(`URL のパスが不正です(使えない文字か . / .. を含む): ${input}`)
+    parts.push(p)
   }
-  if (rest.split('/').some((p) => p === '..' || p === '.')) throw new InputError(`URL のパスが不正です: ${input}`)
-  return { owner, repo, kind: kind ?? null, rest }
+  if (kind === 'blob') {
+    if (parts.at(-1) !== 'SKILL.md') throw new InputError(`GitHub の blob の URL は SKILL.md を指すものだけ使えます: ${input}`)
+    parts.pop()
+  }
+  return { owner, repo, kind: kind ?? null, rest: parts.join('/') }
 }
 
 /** The clone URL for owner/repo. SKILL2ZIP_GITHUB_BASE replaces https://github.com (tests point it at file:// repositories). */
@@ -134,40 +154,14 @@ function gitRootOf(dir) {
   }
 }
 
-/** Remove user:password@ from a remote URL so it can be written into SOURCE.md. */
-export function publicUrl(url) {
-  return url.replace(/^(https?:\/\/)[^/@]*@/i, '$1')
-}
-
-/** Index entries of a local repository that are links, submodules or executables (read-only). */
-function localSpecialEntries(root, rel) {
-  const r = git(['-C', root, 'ls-files', '-s', '-z', '--', rel || '.'], { raw: true, allowFail: true })
-  if (r.status !== 0) return []
-  const list = []
-  for (const rec of r.stdout.toString('utf8').split('\0')) {
-    if (!rec) continue
-    const tab = rec.indexOf('\t')
-    const mode = rec.slice(0, tab).split(' ')[0]
-    if (mode === '120000' || mode === '160000' || mode === '100755') list.push({ mode, path: rec.slice(tab + 1) })
-  }
-  return list
-}
-
-function localGitFacts(root) {
-  const q = (args) => {
-    const r = git(['-C', root, ...args], { allowFail: true })
-    return r.status === 0 ? String(r.stdout).trim() : null
-  }
-  const remote = q(['remote', 'get-url', 'origin'])
-  return { remote: remote ? publicUrl(remote) : null, commit: q(['rev-parse', 'HEAD']), date: q(['log', '-1', '--format=%cs']) }
-}
 
 /**
  * Resolve the input. Returns
- *   { kind: 'local'|'installed'|'github', label, dir, root, rel, special, git, origin, where, cleanup }
+ *   { kind: 'local'|'installed'|'github', label, dir, root, rel, special, notes, git, origin, where, cleanup }
  * where `root` is the folder the license search may climb to (repository root or the skill
  * folder itself), `rel` the skill folder relative to it (posix, '' when equal), `special`
- * the git entries that are links/submodules/executables with root-relative paths.
+ * the git entries that are links/submodules/executables with root-relative paths, `notes`
+ * what could not be checked (for the report).
  */
 export function resolveInput(input, { cwd = process.cwd(), home = homedir(), log = () => {} } = {}) {
   if (!input) throw new InputError('変換するスキルを指定してください(フォルダ、GitHub の URL、インストール済みのスキル名)')
@@ -205,16 +199,17 @@ function local(dir, kind, input, where) {
   requireSkillRoot(dir, input)
   const root = gitRootOf(dir) ?? dir
   const rel = relative(root, dir).split(sep).join('/')
-  const special = existsSync(join(root, '.git')) ? localSpecialEntries(root, rel) : []
-  const facts = existsSync(join(root, '.git')) ? localGitFacts(root) : null
+  // Read from the files; git itself is never run inside the user's folder.
+  const facts = existsSync(join(root, '.git')) ? readLocalRepo(root, rel) : null
   return {
     kind,
     label: kind === 'installed' ? `${input}(${where})` : input,
     dir,
     root,
     rel,
-    special,
-    git: facts,
+    special: facts?.special ?? [],
+    notes: facts?.notes ?? [],
+    git: facts && (facts.commit || facts.remote) ? { commit: facts.commit, date: null, remote: facts.remote } : null,
     origin: 'own',
     where,
     cleanup: () => {},
@@ -239,12 +234,15 @@ function resolveGitHub(gh, log) {
     const commit = cloneSparse({ url, dir, patterns: sparsePatterns([path]), ref })
     const date = git(['-C', dir, 'log', '-1', '--format=%cs']).trim()
     const skillDir = path ? join(dir, ...path.split('/')) : dir
+    // Defence in depth: parseGitHubUrl already refuses anything that could leave the clone.
+    if (path && !strictlyInside(dir, skillDir)) throw new InputError(`URL のパスがリポジトリの外を指しています: ${path}`)
     let plain = false
     try {
       plain = lstatSync(skillDir).isDirectory()
     } catch {}
     if (!plain) throw new InputError(`${display} の ${ref || '既定のブランチ'} に ${path} というフォルダがありません`)
     requireSkillRoot(skillDir, `${display}/tree/${ref || 'HEAD'}/${path}`)
+    if (path && !strictlyInside(realpathSync.native(dir), realpathSync.native(skillDir))) throw new InputError(`URL のパスがリポジトリの外を指しています: ${path}`)
     return {
       kind: 'github',
       label: `${display}/tree/${ref || commit}/${path}`.replace(/\/$/, ''),
@@ -252,6 +250,7 @@ function resolveGitHub(gh, log) {
       root: dir,
       rel: path,
       special: specialEntries(dir),
+      notes: [],
       git: { remote: display, commit, date, ref, path, repo: `${gh.owner}/${gh.repo}` },
       origin: 'third-party',
       where: null,

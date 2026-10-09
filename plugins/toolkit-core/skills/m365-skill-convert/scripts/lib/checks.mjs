@@ -34,8 +34,9 @@ export function loadChecks(path) {
       try {
         // A space in a pattern also matches a line break, so wrapped prose still matches.
         // claudeOnly: a feature the Microsoft 365 sandbox cannot honour; the converter treats
-        // it as a blocker, the scout keeps it as 要書き換え.
-        return { label: e.label, re: new RegExp(e.pattern.replace(/ /g, '\\s+'), (e.flags ?? 'i').replace('g', '') + 'g'), claudeOnly: e.claudeOnly === true }
+        // it as a blocker, the scout keeps it as 要書き換え. attention: a variable nothing
+        // replaces in Microsoft 365; the converter lists it first even when it does not stop.
+        return { label: e.label, re: new RegExp(e.pattern.replace(/ /g, '\\s+'), (e.flags ?? 'i').replace('g', '') + 'g'), claudeOnly: e.claudeOnly === true, attention: e.attention === true }
       } catch (err) {
         throw new ConfigError(`${path}: ${key} の "${e.label}" の正規表現が不正です: ${err.message}`)
       }
@@ -134,7 +135,7 @@ export function classifyLicense(text) {
   const t = text.replace(/\s+/g, ' ')
   const restricted =
     /additional restrictions|not permitted to (distribute|copy|reproduce)|commons clause|non-?commercial|\bCC[- ]BY(-SA)?-NC\b|no ?derivatives|\bCC[- ]BY(-NC)?-ND\b/i.test(t) ||
-    (/all rights reserved/i.test(t) && /\bmay not\b|\bmust not\b|\bprohibited\b/i.test(t) && !/permission is hereby granted|redistribution and use in source and binary forms|apache license/i.test(t)) ||
+    (/all rights reserv(?:ed)/i.test(t) && /\bmay not\b|\bmust not\b|\bprohibited\b/i.test(t) && !/permission is hereby granted|redistribution and use in source and binary forms|apache license/i.test(t)) ||
     /^\s*proprietary\b/i.test(t)
   if (restricted) return { id: 'restricted', label: '独自・制限付き' }
   if (/permission is hereby granted, free of charge/i.test(t) || /^\s*(the )?MIT( license)?\s*\.?$/i.test(t)) return { id: 'MIT', label: 'MIT' }
@@ -472,7 +473,9 @@ function checkNetwork(ctx, add) {
 function checkHarness(ctx, add, checks) {
   for (const h of checks.harness) {
     const hits = scanPattern(ctx.textFiles, h.re, (f) => !SCRIPT_EXT.has(extOf(f.rel)))
-    if (hits.length) add('rewrite', 'harness', `読み替えが要る: ${h.label}(${where(hits)}: 「${short(hits[0].match, 30)}」)`, h.claudeOnly ? { claudeOnly: true } : undefined)
+    if (!hits.length) continue
+    const extra = { ...(h.claudeOnly ? { claudeOnly: true } : {}), ...(h.attention ? { attention: true } : {}) }
+    add('rewrite', 'harness', `読み替えが要る: ${h.label}(${where(hits)}: 「${short(hits[0].match, 30)}」)`, Object.keys(extra).length ? extra : undefined)
   }
 }
 
