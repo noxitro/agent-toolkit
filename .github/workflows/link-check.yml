@@ -27,12 +27,16 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           # Generated files repeat the links of their sources, so only the sources are checked.
+          # Imported third-party skills keep the upstream text verbatim (including placeholder
+          # links such as github.com/owner/repo), so their folders are skipped; the folder's own
+          # README.md is still checked.
           args: >-
             --no-progress
             --max-retries 2
             --exclude-path node_modules
             --exclude-path dist
             --exclude-path plugins
+            --exclude-path m365-org-skills/third-party/.+/
             --
             './**/*.md'
           fail: ${{ github.event_name == 'pull_request' }}
