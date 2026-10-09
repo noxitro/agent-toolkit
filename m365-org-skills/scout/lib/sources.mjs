@@ -1,28 +1,16 @@
 // Loading sources.json and fetching each source into the cache as a shallow, sparse,
-// symlink-free clone. Nothing from a clone is executed; see lib/git.mjs.
+// symlink-free clone. Nothing from a clone is executed. The clone itself and the JSON
+// helpers live in the m365-skill-convert skill (one copy for the scout and the converter).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { git, specialEntries } from './git.mjs'
+import { ConfigError, readJson } from '../../../shared/skills/m365-skill-convert/scripts/lib/config.mjs'
+import { applySafeSparse, cloneSparse, git, sparsePatterns, specialEntries } from '../../../shared/skills/m365-skill-convert/scripts/lib/git.mjs'
+
+export { ConfigError, readJson, sparsePatterns }
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const GLOB_RE = /^[A-Za-z0-9_.*?\-/]+$/
-
-export class ConfigError extends Error {}
-
-export function readJson(path, what) {
-  let text
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (e) {
-    throw new ConfigError(`${what} (${path}) が読めません: ${e.message}`)
-  }
-  try {
-    return JSON.parse(text.replace(/^﻿/, ''))
-  } catch (e) {
-    throw new ConfigError(`${what} (${path}) が JSON として読めません: ${e.message}`)
-  }
-}
 
 /** Folder name of a source inside the cache (the same rule import-upstream.mjs uses for --src). */
 export const cacheName = (repo) => repo.split('/')[1]
@@ -63,12 +51,6 @@ export function loadSources(path) {
   return cfg.sources
 }
 
-/** Sparse-checkout patterns (non-cone): the skill folders plus license and contribution notes at any level. */
-export function sparsePatterns(globs) {
-  const ci = (word) => [...word].map((c) => (/[a-z]/i.test(c) ? `[${c.toUpperCase()}${c.toLowerCase()}]` : c)).join('')
-  return [...globs.map((g) => `/${g}/`), `${ci('licen')}[CcSs]${ci('e')}*`, `${ci('copying')}*`, `${ci('contributing')}*`]
-}
-
 export const metaPath = (cacheDir, source) => join(cacheDir, `${cacheName(source.repo)}.scout.json`)
 
 export function readMeta(cacheDir, source) {
@@ -88,20 +70,19 @@ export function fetchSource(cacheDir, source, log = () => {}) {
   if (existsSync(dir) && !existsSync(join(dir, '.git'))) {
     throw new ConfigError(`${dir} は git の clone ではありません。フォルダを消してから、もう一度実行してください`)
   }
-  const fresh = !existsSync(dir)
-  if (fresh) {
+  const patterns = sparsePatterns(source.globs)
+  if (!existsSync(dir)) {
     log(`${source.repo}: 取得しています (${url})`)
-    git(['clone', '--template=', '--depth', '1', '--filter=blob:none', '--no-checkout', '--sparse', '--', url, dir])
+    cloneSparse({ url, dir, patterns })
   } else {
     log(`${source.repo}: 更新しています`)
     const current = git(['-C', dir, 'remote', 'get-url', 'origin']).trim()
     if (current !== url) git(['-C', dir, 'remote', 'set-url', 'origin', url])
+    applySafeSparse(dir, patterns)
+    git(['-C', dir, 'fetch', '--depth', '1', '--no-tags', 'origin', 'HEAD'])
+    git(['-C', dir, 'reset', '--hard', '--quiet', 'FETCH_HEAD'])
+    git(['-C', dir, 'clean', '-ffdxq'])
   }
-  for (const [k, v] of [['core.symlinks', 'false'], ['core.longpaths', 'true'], ['core.autocrlf', 'false']]) git(['-C', dir, 'config', k, v])
-  git(['-C', dir, 'sparse-checkout', 'set', '--no-cone', '--stdin'], { input: sparsePatterns(source.globs).join('\n') + '\n' })
-  if (!fresh) git(['-C', dir, 'fetch', '--depth', '1', '--no-tags', 'origin', 'HEAD'])
-  git(['-C', dir, 'reset', '--hard', '--quiet', fresh ? 'HEAD' : 'FETCH_HEAD'])
-  git(['-C', dir, 'clean', '-ffdxq'])
   const meta = {
     repo: source.repo,
     url,

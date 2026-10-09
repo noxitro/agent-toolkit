@@ -7,6 +7,16 @@ Microsoft 365 Copilot(Agent Builder)のスキル ZIP にするための手引き
 全文読んで決める。スキルは AI への指示そのもので、不適切な指示が入っていてもエージェントはそれに従ってしまう。
 Microsoft も Copilot Cowork の文書で「信頼できる出どころのスキルだけをアップロードする」よう注意している。
 
+## スカウトと変換ツールの使い分け
+
+| したいこと | 道具 |
+| --- | --- |
+| 多くの公開リポジトリから候補を集めて、比べて選ぶ | このスカウト |
+| ZIP にしたいスキルが 1 本決まっている(手元のフォルダ・GitHub の URL・インストール済みのスキル) | 変換ツール [`../skill2zip.bat`](../skill2zip.bat)(説明は [`../README.md`](../README.md) の「1 つのスキルを ZIP にする」) |
+
+どちらも同じ検査・安全な取得・読み替えの組み立てのコードを使う。そのコードは変換ツールのスキル
+`shared/skills/m365-skill-convert/scripts/lib/` に 1 つだけあり、スカウトはそれを読み込む。
+
 ## 必要なもの
 
 - Node.js 20 以上と git(Python は不要)。
@@ -46,7 +56,8 @@ node m365-org-skills/scout/scout.mjs scan --keyword "議事録 meeting incident 
 `node_modules` の下に置くのは、`npm test`(`node --test`)が取得物の中の `test-*.js` などをテストと間違えて実行しないため
 (実際に一度起きた)。シンボリック リンクやサブモジュール、実行属性の付いたファイルは取り込まずに検査結果に出す。
 
-検査に使う語句(人に関わる判断の語句、読み替えが要る語句、サンドボックスに無い CLI ツール)は [`checks.json`](checks.json) で直せる。
+検査に使う語句(人に関わる判断の語句、読み替えが要る語句、サンドボックスに無い CLI ツール)は
+[`checks.json`](../../shared/skills/m365-skill-convert/scripts/lib/checks.json) で直せる(変換ツールと共通。自分用に変えるときは写しを作って `--checks <ファイル>` で渡す)。
 
 ### 2. 読む
 

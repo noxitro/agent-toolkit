@@ -205,6 +205,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | --- | --- | --- |
 | `agent-asset-authoring` | スキル | 複数ハーネスで動く資産の書き方(共有 frontmatter の契約、ハーネス固有の設定の置き場、可搬性の罠) |
 | `m365-skill-pack` | スキル | 実装↔監査の反復を Microsoft 365 Copilot のカスタムエージェント(Agent Builder)に委ねるための資産一式。スキル ZIP の検証と梱包、入力 ZIP の作成、結果の取り込み。日本語の手引きは [shared/skills/m365-skill-pack/README.md](shared/skills/m365-skill-pack/README.md) |
+| `m365-skill-convert` | スキル | 既存のスキル(手元のフォルダ・GitHub の URL・インストール済み)を 1 本、Microsoft 365 Copilot(Agent Builder)のスキル ZIP にする。自動修正・機械チェック・日本語のレポート付き。日本語の手引きは [shared/skills/m365-skill-convert/README.md](shared/skills/m365-skill-convert/README.md) |
 | `new-agent-asset` | コマンド | このリポジトリに新しい資産の雛形を作る |
 | `asset-reviewer` | エージェント | 新しい資産を読み取り専用で審査する |
 
@@ -219,7 +220,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | `npm run assets` | 生成物をユーザー単位の探索場所に入れる・更新する(`-- --setup`・`-- --remove` も可。Windows の利用者向けは `install.bat`) |
 | `npm run assets:check` | 入っている資産の状態を確かめる。欠落・古い版・不要なものがあれば失敗 |
 | `npm run links` | `assets` をリンクモードで実行する(開発者向け) |
-| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプト)と、Node 版・PowerShell 版インストーラの同じシナリオでの検査。Python や PowerShell が PATH に無ければその分はスキップ(PowerShell の場所は環境変数 `PWSH` でも指定できる) |
+| `npm test` | スキルに同梱するスクリプトの単体テスト(現在は `m365-skill-pack` の ZIP ライタ、バンドル書式、パッケージ検証、サンドボックス側 Python スクリプトと、`m365-skill-convert` の変換)と、Node 版・PowerShell 版インストーラの同じシナリオでの検査。Python や PowerShell が PATH に無ければその分はスキップ(PowerShell の場所は環境変数 `PWSH` でも指定できる) |
 
 ## CI
 

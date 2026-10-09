@@ -66,6 +66,8 @@ python-docx や openpyxl などを前提にするものがあり、それを採�
 - 評価の記録(採用しなかったものと理由を含む)は [external-skills.md](external-skills.md)。
 - **新しく公開スキルを探して ZIP にする手順と道具**は [scout/README.md](scout/README.md)(スキル スカウト)。誰でも同じ手順で、
   候補を集めて機械で検査し、中身を読んで選んだものだけを ZIP にできる。
+- 共通の読み替えの文面は、変換ツール(下の「1 つのスキルを ZIP にする」)の既定値として
+  `shared/skills/m365-skill-convert/scripts/lib/overlay-ja.json` にも置いている。`overlays.json` の `common` と同じであることをテストで確かめる。
 
 上流が更新されたときの取り込み直し(必要なもの: Node.js 20 以上と git。Python は要らない):
 
@@ -102,6 +104,25 @@ node m365-org-skills/scout/import-upstream.mjs --src artifacts/skill-scout/cache
 | `skills/training-quiz` | 研修資料から理解度テスト |
 
 定義シートは `agents/parked/`。使うときは `node shared/skills/m365-skill-pack/scripts/pack-skill.mjs m365-org-skills/skills/<名前> --from-template --out <出力先>` で ZIP にする。
+
+## 1 つのスキルを ZIP にする(skill2zip)
+
+ZIP にしたいスキルが**もう決まっている**ときは、スカウトを使わずに変換ツールで 1 本ずつ ZIP にできる。
+手元のフォルダ、GitHub のフォルダの URL、インストール済みのスキルの名前のどれでも指定できる。
+
+| 使い分け | 道具 |
+| --- | --- |
+| 多くの公開リポジトリから候補を探して比べる | スキル スカウト([scout/README.md](scout/README.md)) |
+| 決まっている 1 本を ZIP にする(自作・公開どちらも) | 変換ツール [`skill2zip.bat`](skill2zip.bat) |
+
+1. [`skill2zip.bat`](skill2zip.bat) をダブルクリックし、スキルのフォルダのパスか GitHub の URL を入力する(フォルダを .bat にドラッグしてもよい)。
+2. `<リポジトリ>\artifacts\m365-zips\` に ZIP とレポート(`<名前>.report.md`)ができ、レポートが開く。
+3. GitHub など第三者のスキルは、日本語の読み替えのひな形 `<名前>.overlay.json` ができて止まる。TODO を書き換えてからもう一度実行する。
+4. Agent Builder に追加する前に、レポートの「中身を読むフォルダ」にあるファイルを全文読む。
+
+検査はスカウトと同じコードで行う。Claude Code / GitHub Copilot からは「このスキルを Agent Builder 用の ZIP にして」と頼めば
+`m365-skill-convert` スキルが使われる。詳しい使い方とオプションは
+[`shared/skills/m365-skill-convert/README.md`](../shared/skills/m365-skill-convert/README.md)。
 
 ## 使い方(推進担当)
 
@@ -158,6 +179,8 @@ npm test
   上流そのものとの一致は、取り込み直したときの `git diff` で確かめる(テストはネットワークを使わない)。
 - `tests/m365-org-scout.test.mjs`: スキル スカウト(`scout/`)の判定・`adopt`/`build` の拒否・ZIP 化と、取り込みスクリプトが
   シンボリック リンクや無いファイルで既存のパッケージを書き換えずに止まることを、`git init` で作った偽の上流で確かめる(ネットワークは使わない)。
+- `tests/m365-skill-convert.test.mjs`: 変換ツール(`skill2zip`)の自動修正・止める理由・読み替えの TODO・インストール済みの検索・
+  GitHub の入力(`file://` の偽リポジトリ)と、元のフォルダが変わらないことを確かめる(ネットワークは使わない)。
 
 ## 確かめていないこと
 

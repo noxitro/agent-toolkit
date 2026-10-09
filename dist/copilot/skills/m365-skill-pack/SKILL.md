@@ -13,6 +13,7 @@ that the user created once in their Microsoft 365 tenant from the sheets in `m36
 write the task contract, build one input bundle without reading the repository, and
 ingest the one output bundle that comes back. Nothing here calls Microsoft 365 Copilot:
 there is no API or CLI for it, so the user uploads, runs and downloads by hand.
+Converting other skills (local, GitHub or installed) into Agent Builder zips is done by `m365-skill-convert`, not here.
 
 ## Where the bundle may go
 
