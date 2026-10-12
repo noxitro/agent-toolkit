@@ -1,0 +1,26 @@
+{
+  "bundles": {
+    "packaging": {
+      "title": "パッケージ作成",
+      "include": ["/docs/packaging/"],
+      "pages": ["http://127.0.0.1:8765/docs/env/setup.html"],
+      "exclude": []
+    },
+    "environment": {
+      "title": "開発環境",
+      "include": ["/docs/env/"]
+    }
+  },
+  "guidelines": {
+    "package-guide": {
+      "title": "パッケージ作成ガイドライン",
+      "bundle": "packaging",
+      "category": "dev"
+    },
+    "env-setup-guide": {
+      "title": "開発環境セットアップ ガイドライン",
+      "bundle": "environment",
+      "category": "dev"
+    }
+  }
+}

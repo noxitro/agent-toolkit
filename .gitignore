@@ -7,3 +7,6 @@ lychee/
 
 # per-machine install links (scripts/install-links.mjs; copy toolkit.local.example.json)
 toolkit.local.json
+
+# output of a trial run of doc-context-build against its example project
+shared/skills/doc-context-build/example/out/
