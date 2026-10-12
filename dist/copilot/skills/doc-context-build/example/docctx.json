@@ -1,0 +1,14 @@
+{
+  "root_url": "http://127.0.0.1:8765/docs/",
+  "max_depth": 3,
+  "max_pages": 500,
+  "exclude": ["/docs/archive/"],
+  "token_env": "DOC_SITE_TOKEN",
+  "auth_header": "Authorization: Bearer {token}",
+  "stale_days": 30,
+  "split_chars": 30000,
+  "bundle_warn_chars": 36000,
+  "out_dir": "out",
+  "rules_dir": "rules",
+  "manifest": "manifest.json"
+}

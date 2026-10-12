@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>開発環境のセットアップ</title></head>
+<body>
+<main>
+<h1>開発環境のセットアップ</h1>
+<p>必要なもの: Node.js 20 以上、Git、社内証明書。</p>
+<h2>手順</h2>
+<ol>
+  <li>社内証明書を <code>&lt;cert-dir&gt;</code> に置く。</li>
+  <li>環境変数 <code>NODE_EXTRA_CA_CERTS</code> に証明書のパスを設定する。</li>
+  <li><pre>node --version</pre> で 20 以上と表示されることを確認する。</li>
+</ol>
+<p>パッケージ作成に進むには <a href="../packaging/index.html">パッケージ作成の概要</a> を読んでください。</p>
+</main>
+</body>
+</html>
