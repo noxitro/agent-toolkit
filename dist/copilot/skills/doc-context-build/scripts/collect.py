@@ -31,22 +31,47 @@ import urllib.request
 from collections import deque
 from urllib.parse import urlsplit
 
+sys.dont_write_bytecode = True  # no __pycache__ next to the skill sources
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from docctx_lib import (Project, die, front_matter, html_to_markdown, in_scope, normalize_url,  # noqa: E402
-                        now_iso, page_body, read_text, sha256_text, url_slug, write_json, write_text)
+                        now_iso, sha256_text, url_slug, write_json, write_text)
+
+GONE = (404, 410)  # the page no longer exists; anything else is a failure that keeps the cache
 
 
-def build_opener(cfg):
+class _InScopeRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only when it stays inside the crawl scope.
+
+    urllib would otherwise resend every header, including Authorization, to whatever host
+    the site redirects to (an SSO login page on another domain, for example), and would
+    then hand that login page back as if it were the document.
+    """
+
+    def __init__(self, root, excludes):
+        self.root, self.excludes = root, excludes
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not in_scope(normalize_url(newurl), self.root, self.excludes):
+            raise urllib.error.HTTPError(req.full_url, code, "redirect out of scope: " + newurl, headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def build_opener(cfg, root, excludes):
     token = os.environ.get(cfg["token_env"], "")
     headers = {"User-Agent": cfg["user_agent"], "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"}
     if token:
         name, _, value = cfg["auth_header"].partition(":")
         headers[name.strip()] = value.strip().replace("{token}", token)
-    return headers, bool(token)
+    opener = urllib.request.build_opener(_InScopeRedirects(root, excludes))
+    return opener, headers, bool(token)
 
 
-def fetch(url, headers, cached, timeout):
-    """Return (status, body_text, etag, last_modified). status 304 = unchanged."""
+def fetch(opener, url, headers, cached, timeout):
+    """Return (status, body_text, etag, last_modified).
+
+    status: int HTTP status (304 = unchanged), "skip" for non-HTML (body = content type),
+    "error" for a network problem (body = reason).
+    """
     h = dict(headers)
     if cached:
         if cached.get("etag"):
@@ -55,7 +80,7 @@ def fetch(url, headers, cached, timeout):
             h["If-Modified-Since"] = cached["last_modified"]
     req = urllib.request.Request(url, headers=h)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with opener.open(req, timeout=timeout) as resp:
             ctype = resp.headers.get("Content-Type", "")
             if "html" not in ctype and "xml" not in ctype and ctype:
                 return "skip", ctype, None, None
@@ -64,8 +89,8 @@ def fetch(url, headers, cached, timeout):
             return resp.status, raw.decode(charset, errors="replace"), resp.headers.get("ETag"), resp.headers.get("Last-Modified")
     except urllib.error.HTTPError as e:
         if e.code == 304:
-            return 304, "", cached.get("etag"), cached.get("last_modified")
-        return e.code, "", None, None
+            return 304, "", (cached or {}).get("etag"), (cached or {}).get("last_modified")
+        return e.code, (e.msg if 300 <= e.code < 400 else ""), None, None
     except (urllib.error.URLError, OSError) as e:
         return "error", str(e.reason if hasattr(e, "reason") else e), None, None
 
@@ -85,14 +110,14 @@ def main(argv=None):
     root = normalize_url(cfg["root_url"])
     excludes = list(cfg["exclude"])
     max_pages = args.max_pages or cfg["max_pages"]
-    headers, has_token = build_opener(cfg)
+    opener, headers, has_token = build_opener(cfg, root, excludes)
     if not has_token:
         print("note: %s is not set; requesting without credentials" % cfg["token_env"])
 
     index = prj.load_index()
     old_pages = index.get("pages", {})
     new_pages = {}
-    added, changed, removed, unchanged, failed, skipped = [], [], [], [], [], []
+    added, changed, removed, unchanged, failed, skipped, kept = [], [], [], [], [], [], []
     external = set()
     run_at = now_iso()
 
@@ -105,21 +130,32 @@ def main(argv=None):
             print("warning: max_pages=%d reached; stopping" % max_pages)
             break
         cached = old_pages.get(url)
-        status, body, etag, last_mod = fetch(url, headers, cached, cfg["timeout_sec"])
+        status, body, etag, last_mod = fetch(opener, url, headers, cached, cfg["timeout_sec"])
         if status == "skip":
             skipped.append((url, body))
             continue
-        if status == "error" or (isinstance(status, int) and status >= 400):
-            failed.append((url, status if status != "error" else body))
+        if status == 304 and not cached:
+            status, body = "error", "304 without a cached copy"
+        # Any 3xx that reaches here is a redirect the handler refused (out of scope); 304 is fine.
+        if status == "error" or (isinstance(status, int) and status >= 300 and status != 304):
+            reason = body if status == "error" else ("%s %s" % (status, body)).strip()
             if url == root:
-                die("root_url could not be fetched (%s). Check the URL and the %s environment variable." % (failed[0][1], cfg["token_env"]), 1)
-            continue
-        if status == 304 and cached:
+                die("root_url could not be fetched (%s). Check the URL and the %s environment variable." % (reason, cfg["token_env"]), 1)
+            if status in GONE or not cached:
+                failed.append((url, reason))
+                continue
+            # A transient failure must not look like a removal: keep the cached copy and
+            # keep crawling through its known links.
             entry = dict(cached)
+            entry.update({"checked_at": run_at, "last_error": reason, "depth": depth, "parent_url": parent, "order": order})
+            new_pages[url] = entry
+            kept.append((url, reason))
+        elif status == 304:
+            entry = dict(cached)
+            entry.pop("last_error", None)
             entry.update({"checked_at": run_at, "depth": depth, "parent_url": parent, "order": order})
             new_pages[url] = entry
             unchanged.append(url)
-            links = entry.get("links", [])
         else:
             title, md, links = html_to_markdown(body, url)
             links = [normalize_url(l) for l in links]
@@ -161,12 +197,14 @@ def main(argv=None):
                 shutil.move(src, os.path.join(prj.removed_dir, os.path.basename(src)))
 
     report = ["# 収集レポート (%s)" % run_at, "", "- root: %s" % root,
-              "- 取得 %d ページ: 追加 %d / 変更 %d / 不変 %d / 削除 %d / 失敗 %d / 非HTML %d" % (
-                  len(new_pages), len(added), len(changed), len(unchanged), len(removed), len(failed), len(skipped)),
+              "- 取得 %d ページ: 追加 %d / 変更 %d / 不変 %d / 削除 %d / 失敗(キャッシュ維持) %d / 失敗 %d / 非HTML %d" % (
+                  len(new_pages), len(added), len(changed), len(unchanged), len(removed), len(kept), len(failed), len(skipped)),
               "- 外部リンク(取得しない): %d" % len(external), ""]
     for label, items in (("追加", added), ("変更", changed), ("削除", removed)):
         if items:
             report += ["## %s" % label, ""] + ["- %s" % u for u in items] + [""]
+    if kept:
+        report += ["## 失敗(前回のキャッシュを維持)", ""] + ["- %s (%s)" % (u, s) for u, s in kept] + [""]
     if failed:
         report += ["## 失敗", ""] + ["- %s (%s)" % (u, s) for u, s in failed] + [""]
     if skipped:

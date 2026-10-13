@@ -106,20 +106,15 @@ class Project:
         if not cfg.get("root_url"):
             die("docctx.json: root_url is required")
         self.cfg = cfg
-        self.out_dir = self._rel(cfg["out_dir"])
         self.rules_dir = self._rel(cfg["rules_dir"])
         self.manifest_path = self._rel(cfg["manifest"])
-        self.cache_dir = os.path.join(self.out_dir, "cache")
-        self.pages_dir = os.path.join(self.cache_dir, "pages")
-        self.removed_dir = os.path.join(self.cache_dir, "_removed")
-        self.index_path = os.path.join(self.cache_dir, "index.json")
-        self.bundles_dir = os.path.join(self.out_dir, "bundles")
-        self.context_dir = os.path.join(self.out_dir, "context")
+        self.set_out_dir(self._rel(cfg["out_dir"]))
 
     def _rel(self, p):
         return p if os.path.isabs(p) else os.path.normpath(os.path.join(self.dir, p))
 
     def set_out_dir(self, out_dir):
+        """Point every output location under out_dir (also used by --out)."""
         self.out_dir = os.path.abspath(out_dir)
         self.cache_dir = os.path.join(self.out_dir, "cache")
         self.pages_dir = os.path.join(self.cache_dir, "pages")
@@ -183,8 +178,6 @@ class _MarkdownParser(HTMLParser):
     """
 
     SKIP = {"script", "style", "noscript", "nav", "header", "footer", "aside", "template", "svg"}
-    BLOCK = {"p", "div", "section", "article", "main", "ul", "ol", "li", "table", "tr", "blockquote",
-             "h1", "h2", "h3", "h4", "h5", "h6", "pre", "hr", "br", "dl", "dt", "dd", "figure", "figcaption"}
 
     def __init__(self, base_url, scope_tags):
         super().__init__(convert_charrefs=True)
@@ -207,18 +200,23 @@ class _MarkdownParser(HTMLParser):
 
     # -- helpers
     def _emit(self, s):
-        if self._cell is not None:
-            self._cell.append(s)
-        elif self._link_text is not None and self._href is not None:
+        if self._href is not None:  # an open link wins, even inside a table cell
             self._link_text.append(s)
+        elif self._cell is not None:
+            self._cell.append(s)
         else:
             self.out.append(s)
 
     def _newline(self, n=1):
+        """Make sure the output ends with at least n newlines (looks at the tail only)."""
         if self._cell is not None:
             return
-        text = "".join(self.out)
-        trailing = len(text) - len(text.rstrip("\n"))
+        trailing = 0
+        for piece in reversed(self.out):
+            stripped = piece.rstrip("\n")
+            trailing += len(piece) - len(stripped)
+            if stripped:
+                break
         if trailing < n:
             self.out.append("\n" * (n - trailing))
 

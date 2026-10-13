@@ -31,6 +31,7 @@ import os
 import re
 import sys
 
+sys.dont_write_bytecode = True  # no __pycache__ next to the skill sources
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from docctx_lib import (PAGE_MARK_RE, Project, die, now_iso, parse_iso, read_text,  # noqa: E402
                         split_front_matter, write_json, write_text)
