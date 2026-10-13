@@ -30,20 +30,22 @@ import os
 import sys
 from urllib.parse import urlsplit
 
+sys.dont_write_bytecode = True  # no __pycache__ next to the skill sources
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from docctx_lib import PAGE_MARK, Project, die, front_matter, page_body, read_text, write_text  # noqa: E402
+from docctx_lib import PAGE_MARK, Project, die, front_matter, normalize_url, page_body, read_text, write_text  # noqa: E402
+
+
+def matches(url, spec):
+    """Does this (normalized) URL belong to the bundle described by spec?"""
+    inc = [normalize_url(p) if p.startswith("http") else p for p in spec.get("include", [])]
+    single = {normalize_url(p) for p in spec.get("pages", [])}
+    path = urlsplit(url).path
+    hit = url in single or any(url.startswith(p) if p.startswith("http") else path.startswith(p) for p in inc)
+    return hit and not any(x in url for x in spec.get("exclude", []))
 
 
 def select(pages, spec):
-    inc = spec.get("include", [])
-    exc = spec.get("exclude", [])
-    single = set(spec.get("pages", []))
-    chosen = []
-    for url, e in pages.items():
-        path = urlsplit(url).path
-        hit = url in single or any(url.startswith(p) if p.startswith("http") else path.startswith(p) for p in inc)
-        if hit and not any(x in url for x in exc):
-            chosen.append((e.get("order", 0), url, e))
+    chosen = [(e.get("order", 0), url, e) for url, e in pages.items() if matches(url, spec)]
     chosen.sort()
     return chosen
 
@@ -66,7 +68,6 @@ def main(argv=None):
     only = set(args.only.split(",")) if args.only else None
     warn_chars = prj.cfg["bundle_warn_chars"]
 
-    membership = {}  # url -> [bundle]
     for name, spec in manifest["bundles"].items():
         if only and name not in only:
             continue
@@ -76,7 +77,6 @@ def main(argv=None):
         parts, sources = [], []
         oldest = min(e.get("retrieved_at", "") for _, _, e in chosen)
         for _, url, e in chosen:
-            membership.setdefault(url, []).append(name)
             sources.append("- [%s](%s) (取得: %s)" % (e.get("title", url), url, e.get("retrieved_at", "?")))
             body = page_body(read_text(os.path.join(prj.cache_dir, e["file"])))
             parts.append(PAGE_MARK.format(url=url) + "\n" + body.rstrip() + "\n")
@@ -88,12 +88,15 @@ def main(argv=None):
         note = "  (warning: %d chars > %d; consider splitting the context in manifest)" % (len(text), warn_chars) if len(text) > warn_chars else ""
         print("bundle %-20s %3d pages %7d chars -> %s%s" % (name, len(chosen), len(text), out, note))
 
+    # Impact is computed from the manifest rules, not from the pages still cached, so that
+    # a removed page (no longer in the index) is still attributed to its bundles.
     last = index.get("last_run", {})
     touched = {u: k for k in ("added", "changed", "removed") for u in last.get(k, [])}
     by_bundle = {}
     for url, kind in touched.items():
-        for b in membership.get(url, []):
-            by_bundle.setdefault(b, []).append("%s (%s)" % (url, kind))
+        for b, spec in manifest["bundles"].items():
+            if matches(url, spec):
+                by_bundle.setdefault(b, []).append("%s (%s)" % (url, kind))
     lines = ["# 影響レポート (収集 %s)" % last.get("at", "?"), ""]
     if not touched:
         lines.append("前回の収集で追加・変更・削除されたページはありません。")

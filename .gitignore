@@ -10,3 +10,7 @@ toolkit.local.json
 
 # output of a trial run of doc-context-build against its example project
 shared/skills/doc-context-build/example/out/
+
+# Python bytecode caches (the skill scripts set sys.dont_write_bytecode, but a stray run may still leave one)
+__pycache__/
+*.pyc

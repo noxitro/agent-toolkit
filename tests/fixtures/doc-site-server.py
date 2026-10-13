@@ -36,6 +36,17 @@ def main():
                 self.send_response(401)
                 self.end_headers()
                 return
+            # /docs/go-external redirects off-site (the collector must refuse to follow);
+            # any path containing "flaky" answers 503 while <dir>/.flaky-down exists.
+            if self.path.rstrip("/").endswith("/go-external"):
+                self.send_response(302)
+                self.send_header("Location", "http://sso.invalid/login?next=" + self.path)
+                self.end_headers()
+                return
+            if "flaky" in self.path and os.path.exists(os.path.join(root, ".flaky-down")):
+                self.send_response(503)
+                self.end_headers()
+                return
             path = self.translate_path(self.path)
             if os.path.isfile(path):
                 with open(path, "rb") as f:

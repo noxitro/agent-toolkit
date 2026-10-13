@@ -65,12 +65,13 @@ test('collect: crawls the tree with scope, depth, exclude and non-HTML rules', {
   const index = JSON.parse(read('cache', 'index.json'))
   const urls = Object.keys(index.pages).map((u) => new URL(u).pathname).sort()
   assert.deepEqual(urls, ['/docs/', '/docs/deep/level1.html', '/docs/deep/level2.html', '/docs/deep/level3.html',
-    '/docs/env/setup.html', '/docs/packaging/', '/docs/packaging/naming.html', '/docs/packaging/steps.html'])
+    '/docs/env/flaky.html', '/docs/env/setup.html', '/docs/packaging/', '/docs/packaging/naming.html', '/docs/packaging/steps.html'])
+  assert.match(r.stdout, /go-external \(302 redirect out of scope: http:\/\/sso\.invalid\/login/, 'off-site redirect is refused, not followed')
   assert.ok(!urls.includes('/docs/deep/level4.html'), 'max_depth=3 stops before level 4')
   assert.ok(!urls.some((u) => u.includes('/archive/')), 'exclude is honoured')
   assert.match(r.stdout, /diagram\.png \(image\/png\)/, 'non-HTML is recorded, not cached')
   assert.match(r.stdout, /https:\/\/example\.com\/external-reference/, 'external link recorded')
-  assert.equal(index.last_run.added.length, 8)
+  assert.equal(index.last_run.added.length, 9)
   const page = read('cache', 'pages', pages().find((f) => f.startsWith('docs__packaging__steps')))
   assert.match(page, /^source_url: "http:\/\/127\.0\.0\.1:\d+\/docs\/packaging\/steps\.html"$/m)
   assert.match(page, /^retrieved_at: "\d{4}-\d{2}-\d{2}T/m)
@@ -78,6 +79,7 @@ test('collect: crawls the tree with scope, depth, exclude and non-HTML rules', {
   assert.match(page, /^1\. リポジトリのルートで依存関係を入れる。 `npm ci`/m, 'pre inside li stays on the item line')
   const naming = read('cache', 'pages', pages().find((f) => f.startsWith('docs__packaging__naming')))
   assert.match(naming, /^\| name \| 小文字とハイフンのみ \| order-service \|$/m, 'tables become Markdown tables')
+  assert.match(naming, /^\| version \| \[セマンティック バージョニング\]\(https:\/\/semver\.org\/lang\/ja\/\) \| 1\.4\.0 \|$/m, 'links inside cells keep their text')
   for (const f of pages()) assert.ok(!read('cache', 'pages', f).includes(TOKEN), 'token never written')
   assert.ok(!read('cache', 'index.json').includes(TOKEN))
 })
@@ -124,15 +126,32 @@ test('compose: a small split_chars splits at page boundaries with the contract l
   assert.match(first, /すべてを 1 回のメッセージに添付/)
   assert.ok(first.includes('## 執筆ルール(共通)') && !first.includes('## 出力契約と自己検査'))
   assert.ok(last.includes('## 出力契約と自己検査') && !last.includes('## 執筆ルール(共通)'))
-  for (const p of parts.slice(1)) assert.match(read('context', p), /^<!-- 元ページ(\(続き\))?: /m, 'later parts start at a page boundary')
+  for (const p of parts.slice(1)) {
+    // Right after the header's last line the body must start at a page boundary or with the contract.
+    assert.match(read('context', p), /\n- 合成: [^\n]+\n\n(---\n\n(<!-- 元ページ: |## 出力契約と自己検査)|<!-- 元ページ\(続き\): )/, 'later part starts at a page boundary or with the contract: ' + p)
+  }
   const sources = JSON.parse(read('context', 'package-guide.sources.json'))
   assert.deepEqual(sources.parts, parts)
 })
 
 test('collect again: unchanged cache, then a changed and a removed page are detected', { skip: !PY && 'python 3.8+ not found' }, () => {
   let r = run('collect.py', ['--dry-run'])
-  assert.equal(r.status, 0, 'dry-run exit 0 when current: ' + r.stdout)
+  assert.equal(r.status, 0, 'dry-run exit 0 when current: ' + r.stdout + r.stderr)
   assert.match(r.stdout, /cache is current/)
+
+  // A transient 503 keeps the cached copy instead of reporting a removal.
+  writeFileSync(join(site, '.flaky-down'), '')
+  r = run('collect.py', [])
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  assert.match(r.stdout, /失敗\(キャッシュ維持\) 1 \/ 失敗 1 /)
+  assert.match(r.stdout, /flaky\.html \(503/)
+  let index = JSON.parse(read('cache', 'index.json'))
+  const flakyUrl = Object.keys(index.pages).find((u) => u.endsWith('/docs/env/flaky.html'))
+  assert.ok(flakyUrl, 'flaky page still in the index')
+  assert.match(index.pages[flakyUrl].last_error, /^503/)
+  assert.equal(index.last_run.removed.length, 0)
+  assert.ok(pages().some((f) => f.startsWith('docs__env__flaky')), 'cached file kept')
+  rmSync(join(site, '.flaky-down'))
 
   const naming = join(site, 'docs', 'packaging', 'naming.html')
   writeFileSync(naming, readFileSync(naming, 'utf8').replace('-rc.1', '-beta.1'))
@@ -144,19 +163,32 @@ test('collect again: unchanged cache, then a changed and a removed page are dete
 
   r = run('collect.py', [])
   assert.equal(r.status, 0, r.stderr + r.stdout)
-  const index = JSON.parse(read('cache', 'index.json'))
+  index = JSON.parse(read('cache', 'index.json'))
   assert.deepEqual(index.last_run.changed.map((u) => new URL(u).pathname), ['/docs/packaging/naming.html'])
   assert.deepEqual(index.last_run.removed.map((u) => new URL(u).pathname), ['/docs/deep/level3.html'])
   assert.equal(index.last_run.added.length, 0)
+  assert.ok(!('last_error' in index.pages[flakyUrl]), 'recovered page loses last_error')
   assert.ok(readdirSync(join(out, 'cache', '_removed')).some((f) => f.startsWith('docs__deep__level3')))
-  assert.match(read('cache', 'changes.md'), /変更 1 \/ 不変 6 \/ 削除 1/)
+  assert.match(read('cache', 'changes.md'), /変更 1 \/ 不変 7 \/ 削除 1/)
 
   r = run('bundle.py', [])
   assert.equal(r.status, 0, r.stderr + r.stdout)
-  const impact = read('bundles', 'impact.md')
+  let impact = read('bundles', 'impact.md')
   assert.match(impact, /## 束 packaging/)
   assert.match(impact, /naming\.html \(changed\)/)
   assert.ok(!impact.includes('## 束 environment'), 'untouched bundle is not listed')
+
+  // A page that disappears for good (404) is a removal, and it is still attributed to its bundle.
+  rmSync(join(site, 'docs', 'env', 'flaky.html'))
+  r = run('collect.py', [])
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  index = JSON.parse(read('cache', 'index.json'))
+  assert.deepEqual(index.last_run.removed, [flakyUrl])
+  r = run('bundle.py', [])
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  impact = read('bundles', 'impact.md')
+  assert.match(impact, /## 束 environment\n\n影響するガイドライン: env-setup-guide\n\n- .*flaky\.html \(removed\)/, 'removed page listed under its bundle')
+  assert.ok(!impact.includes('## 束 packaging'))
 })
 
 test('compose --strict: a stale bundle is skipped', { skip: !PY && 'python 3.8+ not found' }, () => {
