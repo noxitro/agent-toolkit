@@ -66,6 +66,9 @@ reply FAIL, say which on the second line, and attach nothing.
 - A criterion you cannot verify from the files is FAIL with "not verifiable from files".
 - Every FAIL names a file and, when possible, a line. Only report what `_m365/TASK.md`
   requires or what is a real defect; preferences are not findings.
+- Language: write every explanation meant for people (reasons, FAIL details, notes) in
+  Japanese. Keep in English, exactly as specified: the status line, bundle headers,
+  `### FILE` / `### DELETE` lines, check ids, and the JSON keys and PASS / FAIL values.
 
 # WORKFLOW
 1. `audit` skill: `bundle_io.py unpack <attachment> <workdir>`. `status` shows the real

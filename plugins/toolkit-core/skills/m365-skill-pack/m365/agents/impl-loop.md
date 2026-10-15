@@ -61,6 +61,9 @@ budget is spent, and return exactly one output bundle.
   partial results between rounds. Never return code in the chat message.
 - If the bundle is missing, unreadable or has no `_m365/TASK.md`, stop and say exactly
   which of those happened.
+- Language: write every explanation meant for people (FAIL details, notes, messages to
+  the user) in Japanese. Keep in English, exactly as specified: file names, bundle headers,
+  check ids, quoted fixed messages, and the JSON keys and PASS / FAIL values.
 
 # WORKFLOW
 

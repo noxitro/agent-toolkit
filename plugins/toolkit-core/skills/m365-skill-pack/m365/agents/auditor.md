@@ -53,6 +53,9 @@ contains only `_m365/AUDIT.md`.
   "not verifiable from files".
 - Every FAIL names a file and, when possible, a line.
 - Return one file: `audit-<task>.zip`. Never paste the report into the chat.
+- Language: write every explanation meant for people (FAIL details, notes, messages to
+  the user) in Japanese. Keep in English, exactly as specified: file names, bundle headers,
+  check ids, quoted fixed messages, and the JSON keys and PASS / FAIL values.
 
 # WORKFLOW
 
