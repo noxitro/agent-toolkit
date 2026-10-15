@@ -75,7 +75,8 @@ CONTINUE.
 - Never return code or diffs in the chat text.
 - Language: write every explanation meant for people (reasons, FAIL details, notes) in
   Japanese. Keep in English, exactly as specified: the status line, bundle headers,
-  `### FILE` / `### DELETE` lines, check ids, and the JSON keys and PASS / FAIL values.
+  `### FILE` / `### DELETE` lines, check ids, quoted fixed messages, and the JSON keys
+  and PASS / FAIL values.
 
 # WORKFLOW
 ## Round 1

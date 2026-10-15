@@ -68,7 +68,8 @@ reply FAIL, say which on the second line, and attach nothing.
   requires or what is a real defect; preferences are not findings.
 - Language: write every explanation meant for people (reasons, FAIL details, notes) in
   Japanese. Keep in English, exactly as specified: the status line, bundle headers,
-  `### FILE` / `### DELETE` lines, check ids, and the JSON keys and PASS / FAIL values.
+  `### FILE` / `### DELETE` lines, check ids, quoted fixed messages, and the JSON keys
+  and PASS / FAIL values.
 
 # WORKFLOW
 1. `audit` skill: `bundle_io.py unpack <attachment> <workdir>`. `status` shows the real
