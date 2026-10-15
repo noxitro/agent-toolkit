@@ -107,3 +107,30 @@ test('loop: wrong chat, wrong token, missing bundle and a lying review all stop 
   const blocked = await run(session(t.a, 'impl', [cont]), session(t.b, 'review', [() => ({ status: 'FAIL' })]))
   assert.equal(blocked.outcome, 'blocked')
 })
+
+test('loop: A gets back the whole-repository view B reviewed, not its change-only bundle', async () => {
+  const t = sessionTokens()
+  const seen = []
+  const snapshots = []
+  const A = {
+    token: t.a,
+    async turn(round, message, attachments) {
+      seen.push({ round, message, attachments })
+      const status = round === 1 ? 'CONTINUE' : 'PASS'
+      return { reply: `M365-STATUS: ${status} session=${t.a} round=${round} as=impl\n`, files: round === 1 ? [outBundle(round)] : [] }
+    },
+  }
+  const B = session(t.b, 'review', [(r) => ({ status: 'FAIL', files: [review(r, 'FAIL')] })])
+  const implemented = (outFile, round) => {
+    const snap = join(dir, `snapshot-${SLUG}-r${round}.md`)
+    writeFileSync(snap, formatBundle({ task: SLUG, kind: 'output', round, files: [{ path: 'a.py', data: Buffer.from('x = 1\n') }, { path: '_m365/TASK.md', data: Buffer.from('# TASK demo\n') }] }))
+    snapshots.push(snap)
+    return snap
+  }
+  const r = await runLoop({ A, B, slug: SLUG, inBundle: join(dir, 'in.md'), maxRounds: 3, keep, implemented })
+  assert.equal(r.outcome, 'pass-rejected')
+  assert.equal(seen[1].attachments[0], snapshots[0])
+  assert.match(seen[1].attachments[1], /audit-demo-r1\.md$/)
+  assert.match(seen[1].message, /snapshot-demo-r1\.md \(your work so far: the whole repository after your last round\)/)
+  assert.match(r.lastOut, /a-1-/)
+})

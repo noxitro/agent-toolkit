@@ -203,9 +203,13 @@ M365-STATUS: <CONTINUE|PASS|FAIL> session=<token> round=<n> as=<impl|review>
 1. Script -> A, round 1: the input bundle. A implements and answers `CONTINUE`.
 2. Script -> B, round n: A's latest work. B audits it like `auditor` and answers `PASS` or
    `FAIL` with the review bundle.
-3. Script -> A, round n+1: A's own latest output bundle **and** B's review bundle. Each turn
+3. Script -> A, round n+1: A's work so far as the whole repository - the same file B
+   reviewed - **and** B's review bundle. A ZIP output bundle (`pack --full`) already holds
+   the whole repository and is passed back as is; a text bundle holds only A's changes, so
+   the script passes its snapshot of the working copy after applying it instead (the
+   header line `- changed:` lists the files A has changed since the start). Each turn
    is self-contained (the sandbox may not keep files between turns), so A unpacks the
-   attached output bundle again. For each finding A decides: valid (it names a requirement
+   attached bundle again. For each finding A decides: valid (it names a requirement
    of `_m365/TASK.md` - an `AC-n`, the scope, a constraint, a forbidden pattern - or a real
    defect in the files) or not. Any valid finding: fix all of them and answer `CONTINUE`
    with the new bundle. None: answer `PASS` and list each rejected finding with a one-line
