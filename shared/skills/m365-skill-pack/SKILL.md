@@ -35,6 +35,12 @@ whenever the user proposes attaching a bundle to anything other than that tenant
   The controller is `scripts/lib/external-loop.mjs` (`runLoop`, independent of how turns
   are carried); the driver that operates the chat UI is not part of this skill, so the
   per-task steps below use `impl-loop` and `auditor`.
+- `m365/agents/plan-session.md`, `m365/agents/file-writer.md` and `scripts/lib/staged.mjs`
+  - the staged variant of session A for big tasks ("Staged implementer" in
+  `references/loop-protocol.md`): the planner returns one line per file, a writer agent
+  writes each file in a chat of its own, and `createStagedImplementer({ port })` assembles
+  the output bundle; the chat is behind `port.send`, implemented by whatever drives the
+  Copilot app.
 - `m365/skills/{implement,audit,probe}/` - the skill sources, packaged with
   `scripts/pack-skill.mjs --from-template`. They are project-independent; project
   conventions travel inside each input bundle. `<skill-dir>` below is wherever this

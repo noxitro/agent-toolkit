@@ -232,3 +232,41 @@ appearing, and the script rebuilds its working copy from the input each round.
 - Missing status line, wrong token, round or `as`, `CONTINUE` without a bundle, a bundle
   that cannot be applied, or a status that disagrees with the attached `AUDIT.md`: the loop
   stops as a protocol error. It never guesses.
+
+### Build log (optional)
+
+When the local side can build the repository, the script may build A's work after each
+round and add the log to the whole-repository view as the protocol file
+`_m365/BUILD.log` (`withProtocolFile` in `scripts/lib/bundle.mjs`). Its first line is
+`BUILD: PASS` or `BUILD: FAIL`, then the compiler and linker errors. Session B treats every
+error in it as a real defect; session A fixes them in its next round. It never reaches the
+repository (protocol files go to the reports directory on unpack), and it is only what a
+developer building the code would see, never a hidden check.
+
+## Staged implementer (optional, `scripts/lib/staged.mjs`)
+
+For tasks too big for one reply (many files, hundreds of lines): measured on a multi-file
+C++ task, a session A that had to return the whole round in one reply answered with stubs
+and empty bundles, while a fresh chat asked for one file with the context attached wrote
+the whole file. Staged, session A only plans and separate writers write.
+
+- Session A is the `plan-session` agent. Each turn it answers the status line and, on
+  `CONTINUE`, a plan in one code block: `FILE <path> | <what the file must contain and do,
+  naming the AC-n and findings it serves>` per file to write, `DELETE <path>` per file to
+  delete, dependencies first. It writes no code. Its messages carry a line `step: plan`
+  after the routing lines.
+- For every planned file the script opens a new chat with the `file-writer` agent and
+  attaches a context file: the path and purpose from the plan, `_m365/TASK.md`, the review
+  being fixed, `_m365/BUILD.log` if present, and the repository (or, for a large one, the
+  file list, the files written so far and the current content of the planned file). The
+  writer replies with exactly one `### FILE <path>` section; a long file ends with a line
+  `CONTINUES` and the next lines come in the same chat ("Send the next lines"). A reply
+  without that section is asked again in a fresh chat (3 attempts); giving up returns no
+  bundle, so runLoop stops on `CONTINUE without an output bundle`.
+- The script assembles the cumulative output bundle from every file written so far (a
+  file planned again is replaced; `DELETE` of an input file becomes `### DELETE`), so
+  runLoop and session B see exactly what an unstaged session A would return.
+- The chat sits behind a port: `createStagedImplementer({ port, ... })` returns the
+  session for runLoop and calls `port.send({ role: 'plan' | 'write' | 'more', chat, text,
+  attachments, marker })`. A driver for the Copilot app at hand (UI Automation, a person
+  relaying, a test fake) implements `send`; nothing else in the loop changes.
