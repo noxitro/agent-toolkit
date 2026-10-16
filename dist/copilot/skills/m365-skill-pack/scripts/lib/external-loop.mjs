@@ -72,7 +72,7 @@ export function messageToA(token, round, attachments, final = false) {
   const names = attachments.map((a) => basename(a))
   const body = round === 1
     ? `Attached: ${names[0]} (the input bundle). Implement round 1 as your instructions describe.`
-    : `Attached: ${names[0]} (your latest output bundle) and ${names[1]} (the review from session B). Weigh each finding and reply as your instructions describe.`
+    : `Attached: ${names[0]} (your work so far: the whole repository after your last round) and ${names[1]} (the review from session B). Weigh each finding and reply as your instructions describe.`
   return `session: ${token}\nround: ${round}\n${final ? 'final: yes\n' : ''}${body}\n`
 }
 
@@ -86,8 +86,9 @@ export function messageToB(token, round, attachments) {
  * rounds: how many output bundles A produced that were applied (its implementing rounds).
  * `keep(file, name)` copies a returned file somewhere durable and returns the new path.
  * `implemented(outFile, round)` applies A's bundle to the working copy and returns what B
- * is handed (the bundle itself, or a full snapshot when A's bundle holds only changes);
- * it throws LoopStop when the bundle cannot be applied.
+ * is handed and what A gets back in its next round (the bundle itself when it holds the
+ * whole repository, or a full snapshot when A's bundle holds only changes - a text bundle
+ * does); it throws LoopStop when the bundle cannot be applied.
  */
 export async function runLoop({ A, B, slug, inBundle, maxRounds, keep, implemented = (f) => f }) {
   const turns = []
@@ -95,6 +96,7 @@ export async function runLoop({ A, B, slug, inBundle, maxRounds, keep, implement
   const outRe = new RegExp(`^out-${esc}-r(\\d+)\\.(zip|md)$`)
   const auditRe = new RegExp(`^audit-${esc}-r(\\d+)\\.(zip|md)$`)
   let lastOut = null
+  let lastWork = null
   let lastReview = null
   let lastReviewStatus = null
   let unreviewed = null
@@ -140,6 +142,7 @@ export async function runLoop({ A, B, slug, inBundle, maxRounds, keep, implement
       throw e
     }
     lastOut = kept
+    lastWork = forReview
     rounds = round
 
     const b = await B.turn(round, messageToB(B.token, round, [forReview]), [forReview])
@@ -159,6 +162,8 @@ export async function runLoop({ A, B, slug, inBundle, maxRounds, keep, implement
     lastReviewStatus = sb.status
 
     round++
-    attachments = [lastOut, lastReview]
+    // A gets the same whole-repository view B reviewed: a text bundle holds only A's changes,
+    // so without the snapshot A would see neither the untouched files nor _m365/TASK.md.
+    attachments = [lastWork, lastReview]
   }
 }
