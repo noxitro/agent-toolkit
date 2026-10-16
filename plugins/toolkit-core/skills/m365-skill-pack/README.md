@@ -12,7 +12,9 @@ Microsoft 365 Copilot のカスタムエージェント(Agent Builder)に「実�
 | `m365/SETUP.md` | **Microsoft 365 Copilot 側で 1 回だけ行う**セットアップ手順(日本語) |
 | `m365/agents/impl-loop.md`, `m365/agents/auditor.md` | Agent Builder に貼るエージェント定義シート(標準の使い方) |
 | `m365/agents/impl-session.md`, `m365/agents/review-session.md` | 外部ループ用のエージェント定義シート(下の「外部ループ」) |
+| `m365/agents/plan-session.md`, `m365/agents/file-writer.md` | 外部ループを段階式で回すときのエージェント定義シート(下の「段階式」) |
 | `scripts/lib/external-loop.mjs` | 外部ループの判定ロジック(`runLoop`)。チャットを操作する部品は含まない |
+| `scripts/lib/staged.mjs` | 段階式のセッション A(`createStagedImplementer`)。チャットとのやり取りは差し込み口(ポート)に任せる |
 | `m365/skills/implement`, `audit`, `probe` | Microsoft 365 側のスキル素材(`SKILL.template.md` + Python スクリプト) |
 | `scripts/pack-skill.mjs` | スキルを検証して Agent Builder 用 `.zip` にする |
 | `scripts/make-input.mjs` | リポジトリ全体 + `_m365/TASK.md` を入力 ZIP にする(中身は読まない) |
@@ -125,6 +127,21 @@ Claude Code のプラグインとして導入した場合はプラグインの `
 | エージェント定義シート `impl-session` / `review-session` | 実リポジトリに対して `runLoop` を回し、結果を取り込んで要約を返す入口のスクリプト |
 
 上の 2 つを作るまでは、外部ループは使えない。その間は標準の使い方(`impl-loop` + `auditor`)を使う。
+
+### 段階式(大きな課題向け)
+
+ファイルが多く数百行になる課題では、1 回の返答でラウンドの成果を返させると、Copilot が骨組みや空のバンドルを返す
+ことがある(複数ファイルの C++ 課題で実測)。新しいチャットで 1 ファイルずつ、文脈を添付して頼むと全文が返った。
+そこで段階式では、セッション A(`plan-session`)は計画だけを返し、各ファイルは `file-writer` の新しいチャットが書く。
+規約は `references/loop-protocol.md` の「Staged implementer」。
+
+| 含まれているもの | 利用者が作るもの |
+| --- | --- |
+| `scripts/lib/staged.mjs` の `createStagedImplementer`。計画の読み取り、書き手への文脈ファイルの作成と依頼、続き(`CONTINUES`)の連結、取り直し、累積の出力バンドルの組み立てを行い、`runLoop` に渡すセッション A を返す | 差し込み口 `port.send({ role, chat, text, attachments, marker })` の実装。`role` は `plan`(A のチャット)・`write`(書き手の新しいチャット)・`more`(同じ書き手の続き)。職場では、ここでカスタムエージェント(`plan-session` / `file-writer`)のチャットを開いて送る |
+| エージェント定義シート `plan-session` / `file-writer`、ビルドログ(`_m365/BUILD.log`)を扱う規則(`review-session` にも追記) | (任意)各ラウンドの後に手元でビルドし、`withProtocolFile(bundle, '_m365/BUILD.log', log)` でスナップショットに入れる処理 |
+
+カスタムエージェントを使う場合、指示文はエージェント側にあるので、`plannerInstructions` / `writerInstructions` は渡さない
+(エージェントを使わず普通のチャットに送る場合だけ、指示文を本文や文脈ファイルの先頭に入れる)。
 
 ## Cowork について
 

@@ -66,6 +66,9 @@ reply FAIL, say which on the second line, and attach nothing.
 - A criterion you cannot verify from the files is FAIL with "not verifiable from files".
 - Every FAIL names a file and, when possible, a line. Only report what `_m365/TASK.md`
   requires or what is a real defect; preferences are not findings.
+- If the bundle holds `_m365/BUILD.log`, it is the result of a real build of the
+  repository (first line PASS or FAIL). Every compiler or linker error in it is a real
+  defect: report it as FAIL with the file and line it names.
 - Language: write every explanation meant for people (reasons, FAIL details, notes) in
   Japanese. Keep in English, exactly as specified: the status line, bundle headers,
   `### FILE` / `### DELETE` lines, check ids, quoted fixed messages, and the JSON keys

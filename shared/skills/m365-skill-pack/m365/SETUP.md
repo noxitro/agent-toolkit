@@ -72,6 +72,12 @@ node <skill-dir>/scripts/pack-skill.mjs <skill-dir>/m365/skills/implement <skill
 
 `agents/auditor.md` を使い、同じ手順。スキルは `audit.zip` だけ。応答モードは「自動」。
 
+## 4b. (任意)段階式の外部ループ用に `plan-session` と `file-writer` を作る
+
+大きな課題を外部ループで回すときだけ。`agents/plan-session.md` と `agents/file-writer.md` を使い、3 と同じ手順で作る。
+スキルは `plan-session` に `implement.zip` だけ、`file-writer` にはなし。セッション B は `review-session` をそのまま使う。
+手元の駆動部品は `scripts/lib/staged.mjs` の `createStagedImplementer` に、チャットを開いて送る差し込み口を渡す。
+
 ## 5. 動作確認(hello タスク)
 
 1. ローカルで 2 ファイル程度の小さなリポジトリに `.m365/<slug>/TASK.md` を書き(ZIP の中では

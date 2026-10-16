@@ -183,6 +183,31 @@ export function parseBundle(text) {
   return { header, files, deletes, skipped }
 }
 
+/**
+ * Adds a protocol file (a path under _m365/, e.g. _m365/BUILD.log) to the text of a bundle,
+ * before its "## Skipped" section, replacing a section of the same path. Protocol files never
+ * reach the repository on unpack, so this carries evidence such as a local build log.
+ */
+export function withProtocolFile(bundleText, path, content) {
+  if (!isProtocolPath(path)) throw new Error(`${path} is not a protocol path (${PROTOCOL_PREFIX}...)`)
+  const parsed = parseBundle(bundleText)
+  const text = String(content).replace(/\r\n?/g, '\n').replace(/\n*$/, '\n')
+  const fence = '`'.repeat(Math.max(3, longestBacktickRun(text) + 1))
+  const section = `### FILE ${path}\n${fence}\n${text}${fence}\n\n`
+  let base = bundleText.replace(/\r\n/g, '\n')
+  if (parsed.files.some((f) => f.path === path)) {
+    const lines = base.split('\n')
+    const k = lines.indexOf(`### FILE ${path}`)
+    const close = lines[k + 1].match(/^`{3,}/)[0]
+    let j = k + 2
+    while (j < lines.length && lines[j] !== close) j++
+    lines.splice(k, j - k + 1 + (lines[j + 1] === '' ? 1 : 0))
+    base = lines.join('\n')
+  }
+  const at = base.indexOf('\n## Skipped')
+  return at === -1 ? `${base.replace(/\n*$/, '\n\n')}${section}` : `${base.slice(0, at + 1)}${section}${base.slice(at + 1)}`
+}
+
 /** Keep CRLF when the existing target file uses CRLF; new files get LF. */
 export function matchLineEndings(content, existing) {
   if (existing && existing.includes('\r\n')) return content.replace(/\r?\n/g, '\r\n')
