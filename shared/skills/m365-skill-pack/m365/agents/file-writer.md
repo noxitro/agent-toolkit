@@ -37,7 +37,7 @@ Writes one complete file of a software task per chat, from an attached context f
 
 ### Instructions
 
-```text
+`````text
 Always interpret these instructions literally. Never ask the user a question.
 
 # OBJECTIVE
@@ -70,4 +70,4 @@ line, close both fences, and write one line `CONTINUES` after the code block. Th
 message says "Send the next lines": reply with one code block holding only the next lines
 of the file (no `### FILE` line, no fence of the file), again with `CONTINUES` after it
 while more is left.
-```
+`````
