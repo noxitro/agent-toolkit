@@ -1,0 +1,45 @@
+# ============================================================
+# Claude (PR / Issue で /claude と書いたときだけ動く)
+#
+# 本体は noxitro/github-templates の共通ワークフロー (.github/workflows/claude-agent.yml)。
+# 使い方・認証・権限の詳細はそちらの冒頭と github-templates の README。
+#
+# 使い方: コメントの先頭に「/claude」と書き、空白か改行を挟んで頼む。
+#         例:「/claude レビューして」「/claude この変更で互換性は壊れない?」
+#         「/claudeレビューして」のように続けて書くと反応しない。
+# 自動では走らせない: PR ごとに走らせると重複が多く、利用枠も減るため。
+# Secret: CLAUDE_CODE_OAUTH_TOKEN (必須)。AGENT_APP_ID / AGENT_APP_PRIVATE_KEY を
+#         足すと、自前の GitHub App の名義で動く (無ければ Claude GitHub App)。
+# 注意  : issue_comment で起動するワークフローは既定ブランチ (main) の版が使われる。
+#         ここを変えても、main に入るまでは前の版のまま動く。
+# ============================================================
+
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+jobs:
+  claude:
+    # 共通側の job が使う権限。呼び出し側で与えないと共通側では広げられない。
+    permissions:
+      contents: read
+      pull-requests: write   # レビューコメントを書く
+      issues: write          # 会話欄に返信する
+      id-token: write        # Claude GitHub App の認証に使う
+      actions: read          # CI の結果を読んで答えられるように
+    uses: noxitro/github-templates/.github/workflows/claude-agent.yml@main
+    # 共通側で使う Secret だけを渡す (secrets: inherit だとリポジトリの Secret がすべて渡る)。
+    # 無いものは空のまま渡り、共通側で扱う。
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}

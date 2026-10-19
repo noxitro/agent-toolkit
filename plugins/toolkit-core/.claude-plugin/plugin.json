@@ -1,0 +1,13 @@
+{
+  "name": "toolkit-core",
+  "description": "Core skills, commands and agents shared across every supported harness.",
+  "version": "0.1.0",
+  "author": {
+    "name": "nitro",
+    "url": "https://github.com/noxitro"
+  },
+  "homepage": "https://github.com/noxitro/agent-toolkit",
+  "repository": "https://github.com/noxitro/agent-toolkit",
+  "license": "MIT",
+  "keywords": ["skills", "agents", "commands", "multi-harness"]
+}

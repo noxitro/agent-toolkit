@@ -1,0 +1,21 @@
+{
+  "name": "agent-toolkit",
+  "owner": {
+    "name": "nitro",
+    "url": "https://github.com/noxitro"
+  },
+  "metadata": {
+    "description": "Skills, agents, commands and workflows for Claude Code, OpenCode and GitHub Copilot.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "toolkit-core",
+      "source": "./plugins/toolkit-core",
+      "description": "Core skills, commands and agents shared across every supported harness.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": ["skills", "agents", "commands", "multi-harness"]
+    }
+  ]
+}

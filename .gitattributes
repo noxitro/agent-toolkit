@@ -1,0 +1,11 @@
+# Everything is LF in this repository; a core.autocrlf=true checkout must not turn the
+# sources (and the byte-compared generated copies) into CRLF.
+* text=auto eol=lf
+
+# Shell scripts run under bash/sh on Linux (cloud sessions, CI) and under Git for Windows' sh.
+# With core.autocrlf=true a CRLF checkout breaks them ("set -uo pipefail\r"), e.g.
+# .claude/hooks/session-start.sh, which then fails silently and leaves the git hooks off.
+*.sh text eol=lf
+
+# cmd.exe batch files need CRLF.
+*.bat text eol=crlf
