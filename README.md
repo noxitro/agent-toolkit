@@ -236,7 +236,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 
 | ワークフロー | 契機 | 強制する内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト |
+| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト。開発者モードを切り管理者権限を外したプロセスで、リンクモードがジャンクションとコピーに切り替わることも確かめる |
 | [`link-check.yml`](.github/workflows/link-check.yml) | Markdown を触る PR、毎週 | lychee によるリンク検査。定期実行で失敗したときは run を落とさず issue を開く |
 | [`release.yml`](.github/workflows/release.yml) | タグ `v*` | タグが `package.json` と一致すること、`npm run check` 全体、`opencode.zip` / `copilot.zip` 付きのリリース発行 |
 

@@ -56,6 +56,13 @@ jobs:
       - name: Test the Node and PowerShell installers
         run: node --test tests/install-assets.test.mjs
 
+      # The test above only pretends symlinks are refused (AGENT_TOOLKIT_NO_SYMLINK). This one
+      # turns Developer Mode off and drops administrator rights, so the installers' own check
+      # has to notice and fall back to junctions.
+      - name: Link mode on a PC without symlink rights
+        shell: powershell
+        run: .\tests\windows-no-symlink\run.ps1
+
   markdown:
     name: Markdown lint
     runs-on: ubuntu-latest
