@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" font-family="Meiryo, 'Yu Gothic UI', 'Noto Sans JP', sans-serif">
+<title>スキルが読まれる仕組み</title>
+<defs><marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#52606d"/></marker><marker id="arr-red" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#c62828"/></marker><marker id="arr-green" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#2e7d32"/></marker><marker id="arr-grey" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#9aa5b1"/></marker></defs>
+<rect width="960" height="500" fill="#ffffff"/>
+<text x="30" y="40" font-size="19" font-weight="bold" fill="#1f2933" text-anchor="start">スキルが読まれる仕組み: description が発動を決め、本文は合致してから読まれる</text>
+<rect x="30" y="120" width="250" height="90" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="1.5"/>
+<text x="155.0" y="149.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">セッション開始</text>
+<text x="155.0" y="169.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">全スキルの name と description</text>
+<text x="155.0" y="190.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">だけを読み込む</text>
+<rect x="360" y="120" width="220" height="90" rx="8" fill="#eceff1" stroke="#607d8b" stroke-width="1.5"/>
+<text x="470.0" y="149.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">依頼を受ける</text>
+<text x="470.0" y="169.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">「Phase 3 を進めて」</text>
+<text x="470.0" y="190.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">「/phase-loop 3」</text>
+<rect x="660" y="120" width="270" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="795.0" y="149.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">合致を判断</text>
+<text x="795.0" y="169.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">依頼文 × description</text>
+<text x="795.0" y="190.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">(本文はまだ読まれていない)</text>
+<line x1="280" y1="165" x2="360" y2="165" stroke="#52606d" stroke-width="1.8" marker-end="url(#arr)"/>
+<line x1="580" y1="165" x2="660" y2="165" stroke="#52606d" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="660" y="290" width="270" height="100" rx="8" fill="#e8f5e9" stroke="#43a047" stroke-width="1.5"/>
+<text x="795.0" y="324.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">合致した</text>
+<text x="795.0" y="344.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">SKILL.md 本文と、本文が参照する</text>
+<text x="795.0" y="365.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">references/ scripts/ を読んで作業</text>
+<rect x="360" y="290" width="220" height="100" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="470.0" y="324.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">合致しない</text>
+<text x="470.0" y="344.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">本文は読まれない</text>
+<text x="470.0" y="365.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">(素の Copilot として応答)</text>
+<line x1="795" y1="210" x2="795" y2="290" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arr-green)"/>
+<text x="840" y="255" font-size="13" fill="#2e7d32" text-anchor="middle">自動選択</text>
+<line x1="680" y1="210" x2="560" y2="290" stroke="#c62828" stroke-width="1.8" marker-end="url(#arr-red)"/>
+<text x="590" y="245" font-size="13" fill="#c62828" text-anchor="middle">合致せず</text>
+<path d="M 560 125 C 620 75, 950 75, 950 250 C 950 285, 945 300, 932 310" fill="none" stroke="#52606d" stroke-width="1.8" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<text x="760" y="72" font-size="13" fill="#52606d" text-anchor="middle">/&lt;スキル名&gt; で手動起動(合致判断を飛ばす)</text>
+<rect x="30" y="290" width="250" height="100" rx="8" fill="#fffde7" stroke="#f9a825" stroke-width="1.5"/>
+<text x="155.0" y="324.6" font-size="14" font-weight="bold" fill="#1f2933" text-anchor="middle">だから</text>
+<text x="155.0" y="344.9" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">description には「いつ使うか」を書く。</text>
+<text x="155.0" y="365.2" font-size="14" font-weight="normal" fill="#52606d" text-anchor="middle">本文の良し悪しは発動に効かない</text>
+<text x="30" y="440" font-size="13" font-weight="normal" fill="#52606d" text-anchor="start">増やすたびに description の合計が全依頼のコストになり、似た description 同士で取り合いが起きる。同時に置くスキルは絞る。</text>
+<text x="30" y="465" font-size="13" font-weight="normal" fill="#52606d" text-anchor="start">確認: /skills list(登録されたか)→ 依頼を打ってスキルが読まれた表示が出るか(発動したか)。見えない資産は存在しないのと同じ。</text>
+</svg>
