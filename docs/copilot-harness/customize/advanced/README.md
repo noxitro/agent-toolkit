@@ -8,7 +8,7 @@
 それらを組み合わせて「実装役が作る → 審査役が検証する → ゲートを満たしたら次へ」を回す**ユーザーハーネス**を扱う。
 読み終えたら、自分のリポジトリでユーザーハーネスを 1 周回せる状態になることが到達目標。
 
-スライド版: [slides/customize-guide.pptx](../slides/customize-guide.pptx)(本資料の要点を 1 章 3〜6 枚に圧縮したもの。説明会用。本文が正)。
+スライド版: [slides/customize-guide-advanced.pptx](../slides/customize-guide-advanced.pptx)(本資料の要点を 1 章 3〜6 枚に圧縮したもの。説明会用。本文が正)。
 
 ## この資料の方針
 
