@@ -83,6 +83,35 @@
 - プロンプトファイルの探索は開いているリポジトリの `.github/prompts` から始まるので、`.github/`
   へのコピー導入が公式の経路。
 
+## Codex(ビルドの対象外)
+
+OpenAI の Codex(CLI / IDE 拡張)向けの生成物は作っていない。スキルだけは仕様が同じなので、生成物を
+コピーすれば使える。以下は公式文書による(取得日 2026-10-21。[Build skills](https://learn.chatgpt.com/docs/build-skills)、
+[Custom prompts](https://learn.chatgpt.com/docs/custom-prompts)、
+[Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents))。
+
+**スキル。** Agent Skills と同じ形(`SKILL.md` の frontmatter に `name` と `description`、任意で
+scripts や references を同梱)。探索場所はリポジトリ単位が `.agents/skills/`(作業ディレクトリ、その親、
+リポジトリのルート)、ユーザー単位が `~/.agents/skills/`、マシン全体が `/etc/codex/skills/`。
+したがって `plugins/toolkit-core/skills/`(または `dist/copilot/skills/`。中身は同じ)を
+`~/.agents/skills/` にコピーすればそのまま読まれる。インストーラには Codex の preset が無いので手でコピーする。
+
+**カスタムプロンプト(スラッシュコマンド)。** `~/.codex/prompts/*.md`(直下だけ。リポジトリ経由では
+配れない)。frontmatter は `description` と `argument-hint`、引数は `$1`〜`$9`・`$ARGUMENTS`・`$KEY`、
+呼び出しは `/prompts:<name>`。このリポジトリの `plugins/toolkit-core/commands/*.md` は同じ形
+(`description`・`argument-hint`・`$ARGUMENTS`)なので、コピーすればそのまま読まれるはず(未実測)。
+ただし Codex 自身がこの仕組みを非推奨にしてスキルへの移行を勧めているので、生成物は作らない。
+
+**サブエージェント。** `~/.codex/agents/*.toml`(ユーザー単位)と `.codex/agents/*.toml`(リポジトリ単位)。
+TOML で `name`・`description`・`developer_instructions` が必須。Markdown + frontmatter の `agents/` とは
+形式が別なので生成しない。持ち運ぶなら本文を `developer_instructions` に写す。
+
+**メモ。**
+
+- `.agents/skills/` と `~/.agents/skills/` は OpenCode も読む(公式文書、2026-10-21)。OpenCode の導入
+  (`dist/opencode/command/` にはスキルから生成したコマンドが入る)と重ねると、同じ資産がスキルと
+  コマンドの両方で見える。Codex と OpenCode を同じ PC で使うなら、どちらで読ませるかを決めて片方にする。
+
 ## ハーネス横断
 
 - **フックは配られない。** フックの配線はハーネスごと(Claude Code: 作業ディレクトリの
