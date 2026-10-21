@@ -21,6 +21,12 @@
 ハーネスごとの詳細、バージョン要件、既知の罠は [docs/harness-notes.md](docs/harness-notes.md) を
 参照。
 
+**Codex**(OpenAI)はビルドの対象外。スキルは同じ Agent Skills の仕様(`SKILL.md` に `name` と
+`description`)なので、`plugins/toolkit-core/skills/` を `~/.agents/skills/` にコピーすればそのまま読まれる。
+コマンドは Codex のカスタムプロンプト(`~/.codex/prompts/`)と同じ形だが Codex 自身が非推奨にしており、
+サブエージェントは形式が別(`.codex/agents/*.toml`)なので、どちらも生成しない。
+→ [docs/harness-notes.md の Codex](docs/harness-notes.md#codexビルドの対象外)
+
 ## 構成
 
 ```text
@@ -61,6 +67,7 @@ docs/                             ハーネスごとのメモ
 | OpenCode / Copilot も使う、またはプラグインを使わない | [インストーラ](#インストーラユーザー単位にコピー)でユーザー単位のフォルダにコピー |
 | 1 つのリポジトリのメンバー全員に Copilot 用の資産を配る | [そのリポジトリの `.github/` にコピー](#リポジトリの-github-にコピーcopilot) |
 | このリポジトリで資産を開発している | [インストーラのリンクモード](#開発者向けリンクモード) |
+| Codex も使う | インストーラに preset は無い。`plugins/toolkit-core/skills/` を `~/.agents/skills/` に手でコピーする([harness-notes の Codex](docs/harness-notes.md#codexビルドの対象外)) |
 
 ### Claude Code のプラグイン
 
@@ -236,7 +243,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 
 | ワークフロー | 契機 | 強制する内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト |
+| [`ci.yml`](.github/workflows/ci.yml) | `main` への push、PR | `npm run validate`、`npm run build:check`、`npm test`、markdownlint、Windows(PowerShell 5.1)でのインストーラのテスト。開発者モードを切り管理者権限を外したプロセスで、リンクモードがジャンクションとコピーに切り替わることも確かめる |
 | [`link-check.yml`](.github/workflows/link-check.yml) | Markdown を触る PR、毎週 | lychee によるリンク検査。定期実行で失敗したときは run を落とさず issue を開く |
 | [`release.yml`](.github/workflows/release.yml) | タグ `v*` | タグが `package.json` と一致すること、`npm run check` 全体、`opencode.zip` / `copilot.zip` 付きのリリース発行 |
 

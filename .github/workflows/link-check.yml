@@ -27,12 +27,15 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           # Generated files repeat the links of their sources, so only the sources are checked.
+          # Templates (docs/copilot-harness/customize/templates) keep {{ }} placeholders in link
+          # targets; those are not links. lychee reports them percent-encoded, so both forms are excluded.
           args: >-
             --no-progress
             --max-retries 2
             --exclude-path node_modules
             --exclude-path dist
             --exclude-path plugins
+            --exclude '(%7B%7B|\{\{)'
             --
             './**/*.md'
           fail: ${{ github.event_name == 'pull_request' }}
