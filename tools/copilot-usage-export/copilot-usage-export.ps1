@@ -6,6 +6,7 @@
 #   copilot-usage-export.ps1 -SessionId <id>     特定のセッションだけ(前方一致)
 #   copilot-usage-export.ps1 -ToolOutput all     記録にツールの結果も入れる(none / fail(既定) / all)
 #   copilot-usage-export.ps1 -Format cli         記録を Copilot CLI の /share file と同じ形式で出す(record(既定) / cli / both)
+#   copilot-usage-export.ps1 -Pick               期間内のセッションを一覧にし、番号(1,3,5 / 2-4)で選んだものだけ書き出す
 #   copilot-usage-export.ps1 -Raw                生の events.jsonl も output\raw\ に複製する
 #   copilot-usage-export.ps1 -OutDir <path>      出力先(既定はこのフォルダの output\)
 #   copilot-usage-export.ps1 -Quiet              画面に出さず output\copilot-usage-export.log に追記する(自動実行用)
@@ -33,11 +34,14 @@ param(
   [string]$CopilotHome,
   [ValidateSet('none', 'fail', 'all')][string]$ToolOutput = 'fail',
   [ValidateSet('record', 'cli', 'both')][string]$Format = 'record',
+  [switch]$Pick,
   [switch]$Raw,
   [switch]$Quiet
 )
 
 $ErrorActionPreference = 'Stop'
+# -Quiet はログにしか書かないので、この組み合わせは何も作らないうちに画面へ出して止める
+if ($Pick -and $Quiet) { Write-Host '-Pick は番号を入力して選ぶので、-Quiet(自動実行)とは一緒に使えない。'; exit 1 }
 if (-not $OutDir) { $OutDir = Join-Path $PSScriptRoot 'output' }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 $logFile = Join-Path $OutDir 'copilot-usage-export.log'
@@ -50,6 +54,8 @@ function Fail([string]$msg) { Say $msg; exit 1 }
 
 $wantRecord = $Format -ne 'cli'
 $wantCli = $Format -ne 'record'
+# -Pick で形式を後から聞くときは、どちらの形式でも出せるように CLI 形式の材料も集めておく
+if ($Pick) { $wantCli = $true }
 if (-not $CopilotHome) { $CopilotHome = Join-Path $env:USERPROFILE '.copilot' }
 if (-not $Since) { $Since = (Get-Date).ToUniversalTime().AddDays(-7).ToString('yyyy-MM-dd') }
 if ($Since -notmatch '^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$') { Fail "-Since は YYYY-MM-DD(UTC)で指定する: $Since" }
@@ -138,8 +144,8 @@ try {
 
   # 期間内に 1 回でも呼び出しがあったセッションを選び、そのセッションは全期間を集計する(期間の境目で欠けないように)
   $sinceLit = $Since.Replace("'", "''")
-  $pick = "select distinct session_id from assistant_usage_events where created_at >= '$sinceLit'"
-  if ($SessionId) { $pick += " and session_id like '" + $SessionId.Replace("'", "''") + "%'" }
+  $pickSql = "select distinct session_id from assistant_usage_events where created_at >= '$sinceLit'"
+  if ($SessionId) { $pickSql += " and session_id like '" + $SessionId.Replace("'", "''") + "%'" }
 
   $appJoin = ''
   $appCols = 'null as app_title, null as app_type, null as context_peak_pct'
@@ -171,7 +177,7 @@ select e.session_id as session_id,
        $appCols
 from assistant_usage_events e
 left join sessions s on s.id = e.session_id$appJoin
-where e.session_id in ($pick)
+where e.session_id in ($pickSql)
 group by e.session_id, coalesce(e.agent_id, '(main)')
 order by min(e.created_at), coalesce(e.agent_id, '(main)')
 "@
@@ -518,6 +524,45 @@ $records = @(foreach ($r in $rows) {
     cwd                = $r['cwd']
   }
 })
+
+# --- -Pick: 一覧から番号で選ぶ(何も入力しない・形が正しくないときは何も書かずに終える) ---
+function Parse-Picks([string]$text, [int]$max) {
+  $set = New-Object System.Collections.Generic.SortedSet[int]
+  foreach ($tok in ($text -split '[,、，\s]+' | Where-Object { $_ })) {
+    if ($tok -match '^(\d+)$') { $a = [int]$Matches[1]; $b = $a }
+    elseif ($tok -match '^(\d+)-(\d+)$') { $a = [int]$Matches[1]; $b = [int]$Matches[2] }
+    else { return $null }
+    if ($a -lt 1 -or $b -gt $max -or $a -gt $b) { return $null }
+    for ($i = $a; $i -le $b; $i++) { [void]$set.Add($i) }
+  }
+  return @($set)
+}
+if ($Pick) {
+  $choices = @($records | Group-Object session_id | ForEach-Object {
+    $g = $_.Group; $m0 = ($g | Where-Object { $_.agent -eq '(main)' } | Select-Object -First 1); if (-not $m0) { $m0 = $g[0] }
+    $place = if ($m0.repo) { $m0.repo } elseif ($m0.cwd) { Split-Path -Leaf $m0.cwd } else { '' }
+    [pscustomobject]@{
+      session_id = $m0.session_id; sort = $m0.first_call_utc; start = $m0.first_call_local.Substring(0, 16); place = $place
+      title = OneLine $m0.title 50; credits = [math]::Round(($g | Measure-Object credits -Sum).Sum, 3)
+    }
+  } | Sort-Object sort)
+  $i = 0
+  $choices | ForEach-Object { $i++; [pscustomobject]@{ '番号' = $i; '開始(現地)' = $_.start; 'リポジトリ/フォルダ' = $_.place; '題名' = $_.title; 'クレジット' = $_.credits } } |
+    Format-Table -AutoSize | Out-String -Width 220 | Write-Host
+  $ans = Read-Host "書き出す番号(例: 1,3,5 / 2-4。何も入力しなければ中止)"
+  if (-not $ans -or -not $ans.Trim()) { Say '何も選ばなかったので、何も書き出さない。'; exit 0 }
+  $picked = Parse-Picks $ans $choices.Count
+  if (-not $picked) { Fail "番号の形が正しくない(1 から $($choices.Count) までの数を 1,3,5 か 2-4 の形で): $ans`n何も書き出していない。" }
+  if (-not $PSBoundParameters.ContainsKey('Format')) {
+    $fa = Read-Host '形式: 1 = 記録(既定) / 2 = Copilot CLI の形式 / 3 = 両方'
+    switch ($fa.Trim()) { '' { $Format = 'record' } '1' { $Format = 'record' } '2' { $Format = 'cli' } '3' { $Format = 'both' } default { Fail "形式は 1・2・3 のどれかで答える: $fa`n何も書き出していない。" } }
+  }
+  $wantRecord = $Format -ne 'cli'
+  $wantCli = $Format -ne 'record'
+  $ids = @($picked | ForEach-Object { $choices[$_ - 1].session_id })
+  $records = @($records | Where-Object { $ids -contains $_.session_id })
+  foreach ($sid in @($sessions.Keys)) { if ($ids -notcontains $sid) { $sessions.Remove($sid) } }
+}
 
 # --- セッションごとの記録(Markdown) ---
 function Role([hashtable]$roles, $aid) { if (-not $aid) { return $null } if ($roles.ContainsKey([string]$aid)) { return $roles[[string]$aid] } return 'サブエージェント' }

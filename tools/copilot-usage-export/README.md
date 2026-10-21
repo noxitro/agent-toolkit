@@ -19,6 +19,7 @@ GitHub Copilot(Copilot CLI と、同じ記録を使うデスクトップ版)が 
 | 直近 7 日に動いたセッションを書き出す | `copilot-usage-export.bat` をダブルクリック |
 | 日付を指定する(UTC) | `copilot-usage-export.bat -Since 2026-10-19` |
 | 特定のセッションだけ | `copilot-usage-export.bat -SessionId <ID の先頭数文字>` |
+| 一覧から番号で選んで書き出す | `copilot-usage-export-pick.bat` をダブルクリック(= `copilot-usage-export.bat -Pick`。下の「番号で選ぶ」) |
 | ツールの結果も記録に入れる | `copilot-usage-export.bat -ToolOutput all`(既定は `fail` = 失敗したときだけ。`none` で入れない) |
 | 記録を Copilot CLI の `/share file` と同じ形式で出す | `copilot-usage-export-cli.bat` をダブルクリック(= `copilot-usage-export.bat -Format cli`。両方出すなら `-Format both`) |
 | 生の記録(events.jsonl)も複製する | `copilot-usage-export.bat -Raw`(`output\raw\` へ) |
@@ -26,6 +27,18 @@ GitHub Copilot(Copilot CLI と、同じ記録を使うデスクトップ版)が 
 | 毎日自動で動かす | `copilot-usage-export-schedule.bat` をダブルクリックし、1 を選ぶ(時刻を聞かれるので HH:mm で答える。毎日その時刻に実行し、PC が止まっていたら次に起動したとき。いまのユーザーで登録し、管理者権限は要らない) |
 
 必要なもの: Windows 10 / 11 の標準の PowerShell 5.1 だけ(Node.js や Python は不要。SQLite は Windows 同梱の `winsqlite3.dll` を使う)。
+
+### 番号で選ぶ(`-Pick`)
+
+`-Since` の期間(既定は直近 7 日)に動いたセッションを、開始の古い順に番号付きで一覧にする。
+列は番号・開始(現地時刻)・リポジトリ/フォルダ・題名・クレジット。
+
+1. 書き出す番号を `1,3,5` や `2-4`(組み合わせて `1,4-6` も可)の形で入力する
+2. `-Format` を付けていなければ形式を聞かれる: `1` = 記録(既定。Enter だけでも同じ)/ `2` = Copilot CLI の形式 / `3` = 両方
+
+選んだセッションだけを書き出す(CSV も選んだセッションの行だけを差し替える)。
+何も入力しなければ何も書かずに終わる。範囲外の番号や形の崩れた入力も、何も書かずに終了コード 1 で終わる。
+番号を入力する作りなので、`-Quiet`(自動実行)とは一緒に使えない(指定するとエラーで止まる)。
 
 ## 出すもの
 
