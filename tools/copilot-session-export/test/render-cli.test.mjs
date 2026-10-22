@@ -3,7 +3,7 @@
 // 期待値の書式は、実際の CLI(1.0.100)の /export の出力と突き合わせて決めたもの。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTimeline, cliOutputPath, renderCliExport } from "../session-export/render-cli.mjs";
+import { buildTimeline, cliOutputPath, parseExportArgs, renderCliExport } from "../session-export/render-cli.mjs";
 import { isAbsolute, join, resolve } from "node:path";
 
 const cwd = "/work/repo";
@@ -124,4 +124,60 @@ test("出力先: パスなしは作業フォルダの copilot-session-<ID>.md", 
   assert.equal(cliOutputPath("", "/w", "sid", p), join("/w", "copilot-session-sid.md"));
   assert.equal(cliOutputPath("out", "/w", "sid", p), join(resolve("/w", "out"), "copilot-session-sid.md"));
   assert.equal(cliOutputPath("a.md", "/w", "sid", p), resolve("/w", "a.md"));
+});
+
+// --- /export usage ---
+// 記録では使用量(session.usage_record)が返答(assistant.message)より先に来る。apiCallId で結び付ける
+const usageRec = (api, s, model, nano, extra = {}) =>
+  ev("session.usage_record", { usage: { apiCallId: api, model, inputTokens: 1000, cacheReadTokens: 200, cacheWriteTokens: 300, outputTokens: 50, reasoningTokens: 7, duration: 1500, copilotUsage: { totalNanoAiu: nano } } }, s, extra);
+const withRecords = [
+  events[0],
+  events[1],
+  usageRec("api-1", 2, "model-a", 250000000),
+  { ...events[3], data: { ...events[3].data, apiCallId: "api-1" } },
+  events[4],
+  events[5],
+  ev("subagent.started", { toolCallId: "c2", agentName: "explore", agentDisplayName: "Explore" }, 4, { agentId: "a1" }),
+  usageRec("api-2", 5, "model-b", 50000000, { agentId: "a1" }),
+  { ...events[6], data: { ...events[6].data, apiCallId: "api-2" } },
+  events[7],
+  events[8],
+  usageRec("api-3", 8, "model-a", 100000000),
+  { ...events[9], data: { ...events[9].data, apiCallId: "api-3" } },
+];
+
+test("usage: 使用量は返答の本文(無ければその返答の最後の項目)に付き、委譲先のものはまとまりの中に付く", () => {
+  const list = buildTimeline(withRecords, { withUsage: true });
+  const tool = list.find((x) => x.k === "tool");
+  assert.equal(tool.usage?.length, 1); // 本文の無い返答 → ツールの項目
+  const g = list.find((x) => x.k === "group");
+  assert.equal(g.children.find((c) => c.k === "copilot").usage?.[0].model, "model-b");
+  assert.equal(list.filter((x) => x.k === "copilot").at(-1).usage?.[0].model, "model-a");
+  assert.equal(buildTimeline(withRecords).some((x) => x.usage), false); // 既定では付けない
+});
+
+test("usage: 合計は役 × モデルごと、各返答の下に 1 行", () => {
+  const md = renderCliExport({ events: withRecords, sessionId: "sid-1", now: new Date(Date.parse(t(65))), cwd, withUsage: true });
+  assert.match(md, /\*\*0\.40 AI credits\*\* in 3 model calls/);
+  assert.match(md, /\| main \| model-a \| 2 \| 0\.35 \| 2,000 \| 400 \| 600 \| 100 \| 14 \|/);
+  assert.match(md, /\| Explore \| model-b \| 1 \| 0\.05 \|/);
+  assert.equal((md.match(/<sub>Usage: /g) || []).length, 3);
+  assert.match(md, /<sub>Usage: model-a · in 1,000 \(cache read 200 \/ write 300\) · out 50 · reasoning 7 · 0\.25 AI credits · 1\.5s<\/sub>/);
+  // usage を付けない出力は、記録に使用量があっても CLI と同じ
+  assert.equal(renderCliExport({ events: withRecords, sessionId: "sid-1", now: new Date(Date.parse(t(65))), cwd }).includes("Usage"), false);
+});
+
+test("usage: 呼び出しごとの記録が無いときは、ランタイムの集計から合計を出す", () => {
+  const metrics = { agentMetrics: { main: { modelMetrics: { "model-x": { requests: { count: 4 }, totalNanoAiu: 1.2e9, usage: { inputTokens: 10 } } } } } };
+  const md = renderCliExport({ events, sessionId: "sid-1", cwd, withUsage: true, metrics });
+  assert.match(md, /\*\*1\.20 AI credits\*\* in 4 model calls \(from the runtime's session totals/);
+  assert.match(renderCliExport({ events, sessionId: "sid-1", cwd, withUsage: true }), /No usage was recorded/);
+});
+
+test("/export の引数: usage・file・session の順不同とパス、未対応のサブコマンド", () => {
+  assert.deepEqual(parseExportArgs(""), { path: "", usage: false });
+  assert.deepEqual(parseExportArgs("usage"), { path: "", usage: true });
+  assert.deepEqual(parseExportArgs("file usage out/x.md"), { path: "out/x.md", usage: true });
+  assert.deepEqual(parseExportArgs("usage file session C:/a b/x.md"), { path: "C:/a b/x.md", usage: true });
+  assert.deepEqual(parseExportArgs("html"), { unsupported: "html" });
 });

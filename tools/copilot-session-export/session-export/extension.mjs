@@ -4,19 +4,47 @@
 //                                   パスなし → 作業フォルダの copilot-session-<ID>.md、フォルダ → その中、.md → そのファイル。
 //                                   Copilot CLI(ターミナル)では組み込みの /export が優先され、この拡張のものは出ない。
 //                                   デスクトップ アプリなど、組み込みの /export が無いところで使う。
+// /export usage [パス]              上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足す。
+//                                   パスなし → 作業フォルダの copilot-session-<ID>-usage.md
 // /save-session [パス]             使用量(役 × モデルごとのクレジットとトークン)付きの記録を書き出す。
 //                                   パスなし → ~/copilot-sessions/<日付>/<時刻>_<ID 8 桁>.md
 //
 // 相対パスはセッションの作業フォルダから解決する。
 import { joinSession } from "@github/copilot-sdk/extension";
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { cliOutputPath, lastCwd, renderCliExport } from "./render-cli.mjs";
+import { cliOutputPath, lastCwd, parseExportArgs, renderCliExport } from "./render-cli.mjs";
 import { outputPath, renderSession } from "./render.mjs";
 
 // 結果の 1 行は記録に残さない(残すと、次に書き出したときに「Info」として載る)
 const tell = (message, level) => session.log(message, { ephemeral: true, ...(level ? { level } : {}) });
+
+// 呼び出しごとの使用量(session.usage_record)は記録ファイルには残るが、getEvents() には含まれない(1.0.99 で確認)。
+// セッションの作業フォルダの events.jsonl から、そのイベントだけを読み足す
+function withUsageRecords(events, sessionId) {
+  if (events.some((e) => e.type === "session.usage_record")) return events;
+  const home = process.env.COPILOT_HOME || join(homedir(), ".copilot");
+  for (const dir of [session.workspacePath, join(home, "session-state", sessionId)]) {
+    const f = dir && join(dir, "events.jsonl");
+    if (!f || !existsSync(f)) continue;
+    const records = readFileSync(f, "utf8")
+      .split("\n")
+      .filter((l) => l.includes('"session.usage_record"'))
+      .flatMap((l) => {
+        try {
+          const e = JSON.parse(l);
+          return e.type === "session.usage_record" ? [e] : [];
+        } catch {
+          return [];
+        }
+      });
+    // 返答より後ろに置いても、apiCallId で結び付くので位置は問わない
+    return [...events, ...records];
+  }
+  return events;
+}
 
 function write(file, text) {
   mkdirSync(dirname(file), { recursive: true });
@@ -41,21 +69,11 @@ function openFolder(file) {
   spawn(cmd, args, { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
 }
 
-// CLI の /export は「file [session|research] [パス]」。ここでは file(と session)だけを受ける
-function parseExportArgs(args) {
-  const words = args.trim().split(/\s+/).filter(Boolean);
-  const sub = words[0]?.toLowerCase();
-  if (["html", "gist", "link", "off", "research"].includes(sub)) return { unsupported: sub };
-  if (sub === "file") words.shift();
-  if (words[0]?.toLowerCase() === "session") words.shift();
-  return { path: words.join(" ") };
-}
-
 const session = await joinSession({
   commands: [
     {
       name: "export",
-      description: "Copilot CLI の /export file と同じ Markdown にセッションを書き出す(モデルは呼ばない)。引数: [file] [パス]",
+      description: "Copilot CLI の /export file と同じ Markdown にセッションを書き出す(モデルは呼ばない)。引数: [usage] [パス](usage でトークンと AI クレジットも)",
       handler: async (ctx) => {
         try {
           const a = parseExportArgs(ctx.args);
@@ -66,8 +84,17 @@ const session = await joinSession({
           const now = new Date();
           const events = await session.getEvents();
           const cwd = lastCwd(events) || process.cwd();
-          const file = cliOutputPath(a.path, cwd, ctx.sessionId, { resolve, join, isAbsolute });
-          write(file, renderCliExport({ events, sessionId: ctx.sessionId, now, cwd }));
+          const file = cliOutputPath(a.path, cwd, ctx.sessionId, { resolve, join, isAbsolute }, a.usage ? "-usage" : "");
+          let metrics = null;
+          if (a.usage) {
+            try {
+              metrics = await session.rpc.usage.getMetrics();
+            } catch {
+              // 使用量の API は実験的。取れなくても呼び出しごとの記録から合計を作る
+            }
+          }
+          const evs = a.usage ? withUsageRecords(events, ctx.sessionId) : events;
+          write(file, renderCliExport({ events: evs, sessionId: ctx.sessionId, now, cwd, withUsage: a.usage, metrics }));
           await announce(`Session exported to: ${file}`, file);
         } catch (err) {
           await tell(`/export に失敗しました: ${err?.message ?? err}`, "error");
