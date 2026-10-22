@@ -1,12 +1,12 @@
 # copilot-session-export
 
-GitHub Copilot のデスクトップ アプリでも、Copilot CLI の `/export`(= `/share file`)と同じ Markdown をその場で書き出せるようにする拡張。
+GitHub Copilot のプラグイン。デスクトップ アプリでも、Copilot CLI の `/export`(= `/share file`)と同じ Markdown をその場で書き出せるようにする。
 モデルは呼ばないので、トークンも AI クレジットも使わない。
 
 | コマンド | 書き出すもの |
 | --- | --- |
 | `/export [file] [パス]` | Copilot CLI の `/export file` と同じ Markdown(CLI 本物の出力と突き合わせて確かめた) |
-| `/export usage [パス]` | 上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足したもの |
+| `/export-usage [パス]` | 上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足したもの(`/export usage` でも同じ) |
 | `/save-session [パス]` | 使用量(役 × モデルごとの AI クレジットとトークン)付きの、読みやすい記録 |
 
 ## 目的
@@ -17,33 +17,93 @@ GitHub Copilot のデスクトップ アプリでも、Copilot CLI の `/export`
 Copilot CLI(ターミナル)には組み込みの `/export` がある。しかし、SDK 経由でランタイムを動かす形(デスクトップ アプリと同じ形)には `/export` が無く、
 `/share` も `link` と `off` しか受け付けない(下の「確かめたこと」)。この拡張はそこを埋める。
 
-## 起動
+## インストール
+
+前提: GitHub Copilot のデスクトップ アプリ(または Copilot CLI)が入っていて、サインイン済みであること。
+手順 2 の `install.bat` は Windows 用(ほかの OS は手順 2 の「手で設定する場合」を見る)。
+
+### 1. プラグインを入れる(マーケットプレイスから)
+
+デスクトップ アプリでは:
+
+1. 左のサイドバーの **Customize** → **Plugins** を開く。
+2. マーケットプレイスの選択欄の横にある設定アイコンから、GitHub リポジトリ `noxitro/agent-toolkit` をマーケットプレイスとして足す。
+3. 一覧に出る **copilot-session-export** の **Install** を押す。
+
+Copilot CLI では:
+
+```bash
+copilot plugin marketplace add noxitro/agent-toolkit
+```
+
+```bash
+copilot plugin install copilot-session-export@agent-toolkit
+```
+
+アプリと CLI は同じ設定(`%USERPROFILE%\.copilot\settings.json` の `enabledPlugins`)を使うので、どちらか一方で入れればよい。
+
+### 2. 機能フラグを有効にする(最初の 1 回だけ)
+
+Copilot の拡張は実験的機能で、プラグインで入れても、機能フラグ `EXTENSIONS` が有効なときだけ読み込まれる(下の「確かめたこと」)。
+agent-toolkit を ZIP でダウンロードするか clone し、`tools/copilot-session-export/install.bat` をダブルクリックして 1 を選ぶ。
+
+`install.bat` がすること:
+
+- `%USERPROFILE%\.copilot\settings.json` の `feature_flags.enabled` に `EXTENSIONS` を足す(書き換える前の内容は `settings.json.bak`。すでに有効なら変えない)。
+  `/experimental on`(または `--experimental` を付けた起動)でも有効になるが、そちらはほかの実験的機能もまとめて有効にして
+  `settings.json` に `"experimental": true` を残すので使わない。
+- 前の版(`install.bat` が拡張を `%USERPROFILE%\.copilot\extensions\session-export\` に直接置いていた版)の置き場が残っていれば消す。
+  プラグインと二重に読まれないようにするため。
 
 | 操作 | 方法 |
 | --- | --- |
-| 入れる | `install.bat` をダブルクリックし、1 を選ぶ(`install.bat install` でも同じ) |
-| 状態を見る | `install.bat` で 2 を選ぶ |
-| 外す | `install.bat` で 3 を選ぶ |
-| 書き出す | Copilot のセッションの入力欄で `/export` または `/save-session` と打つ |
+| 機能フラグを有効にする | `install.bat` で 1(`install.bat enable` でも同じ) |
+| 状態を見る(機能フラグ・プラグイン・前の版の置き場) | `install.bat` で 2 |
+| 機能フラグを外す | `install.bat` で 3(ほかの拡張も読み込まれなくなる) |
 
-入れたあと、デスクトップ アプリはアプリを再起動してから使える(開いていたセッションは、入力欄の `/restart-session` で読み直せる)。
+手で設定する場合は、`settings.json` に次を足す(既に `feature_flags` があれば `enabled` の配列に `"EXTENSIONS"` を足す)。
+
+```json
+"feature_flags": { "enabled": ["EXTENSIONS"] }
+```
+
+### 3. アプリを再起動する
+
+拡張と機能フラグは、アプリが裏で動かしている Copilot のランタイムが起動するときに読まれる。アプリを終了して起動し直す
+(開いていたセッションだけなら、入力欄の `/restart-session` でも読み直せる)。Copilot CLI は次に起動したセッションから使える。
+
+### 入ったかの確かめ方
+
+1 往復以上したセッションの入力欄に `/ex` と打ち、一覧に `/export`(説明が「[パス] — Copilot CLI の /export file と同じ…」)と
+`/export-usage` が出れば入っている。出ないときは `install.bat` の 2 で状態を見る。
 
 **新しいセッションの最初のメッセージには使えない。** 拡張はセッションができてから読み込まれるので、新しいセッションの入力欄に最初に打った
 `/export` は、ただの依頼としてモデルに送られる(トークンを使う)。1 往復以上したセッションで、入力欄に `/` を打って一覧から選ぶ。
-一覧に `/export`(説明が「Copilot CLI の /export file と同じ…」のもの)が出ないときは送らない。
+一覧に出ないときは送らない。
 
-必要なもの: Windows 10 / 11 の標準の PowerShell 5.1(インストーラー)。拡張そのものは Copilot が起動する Node.js のプロセスで動き、
+### 更新
+
+Copilot CLI では次のどちらか。アプリの Customize → Plugins でも更新できる。更新したらアプリを再起動する(または `/restart-session`)。
+
+```bash
+copilot plugin update copilot-session-export
+```
+
+```bash
+copilot plugin update --all
+```
+
+セッションの開始時に自動で更新させたいときは、`settings.json` の `extraKnownMarketplaces` の `agent-toolkit` に `"autoUpdate": true` を足す。
+
+前の版(`install.bat` で拡張を直接置いていた版)を使っていた場合は、上の手順 1 でプラグインを入れ、手順 2 の `install.bat` の 1 を選ぶ(前の版の置き場が消える)。
+
+### 外す
+
+- プラグイン: アプリの Customize → Plugins で外す。CLI なら `copilot plugin uninstall copilot-session-export`。
+- 機能フラグ: `install.bat` の 3。ほかの拡張を使っていて残したいときは外さない。
+
+必要なもの: Windows 10 / 11 の標準の PowerShell 5.1(`install.bat`)。拡張そのものは Copilot が起動する Node.js のプロセスで動き、
 外部のパッケージは使わない(Node.js の標準モジュールと、Copilot が渡す SDK だけ)。
-
-### インストーラーがすること
-
-1. `session-export\` の 3 ファイルを `%USERPROFILE%\.copilot\extensions\session-export\` に写す(環境変数 `COPILOT_HOME` があればその下)。
-2. `%USERPROFILE%\.copilot\settings.json` の `feature_flags.enabled` に `EXTENSIONS` を足す(書き換える前の内容は `settings.json.bak`)。
-   Copilot の拡張は実験的機能で、この機能フラグが有効なときだけ読み込まれる。`/experimental on`(または `--experimental` を付けた起動)でも有効になるが、
-   そちらはほかの実験的機能もまとめて有効にして `settings.json` に `"experimental": true` を残すので、インストーラーは使わない。
-   すでに有効なら何もしない。
-
-外すときは、フォルダを消し、足した `EXTENSIONS` だけを外す。ほかの拡張のために機能フラグを残したいときは `settings.json.bak` から戻す。
 
 ## 使い方
 
@@ -67,9 +127,11 @@ CLI の `/export` と違うところ(どちらも記録に残らないもの):
 - CLI の画面にだけ出た表示(「Tip: /share」のようなヒント、シェルの途中出力、フックの進捗)は入らない。
 - 所要時間と書き出した時刻は、この拡張で書き出した時点のもの。
 
-### /export usage(トークンと AI クレジット付き)
+### /export-usage(トークンと AI クレジット付き)
 
-`/export` を一覧から選び、引数に `usage` と打つ(`/export usage <パス>`、`/export file usage <パス>` でもよい)。
+一覧から `/export-usage` を選んで実行する(書き出す先を指定するときは `/export-usage <パス>`)。
+`/export` の引数に `usage` を付けても同じ(`/export usage <パス>`)。
+拡張のコマンドには、組み込みのコマンドのような引数のヒント(入力欄の候補)を付けられないので、一覧の説明文の先頭に引数を書いている。
 パスなしの書き出し先は、作業フォルダの `copilot-session-<セッション ID>-usage.md`(CLI と同じ形式のファイルと名前を分ける)。
 `usage` を付けない `/export` の出力は、CLI と同じまま変わらない。
 
@@ -125,6 +187,12 @@ Copilot CLI 1.0.99-2(デスクトップ アプリが使っているランタイ�
 | `/export usage` を足したあとの `usage` なしの `/export` | 手元の 156 セッションで、足す前の版と出力がバイト単位で同じ |
 | 呼び出しごとの記録がある 17 セッションを `usage` 付きで描画 | 17 件すべてで、返答ごとの行の数が記録の数と一致 |
 | `getEvents()` に `session.usage_record` が含まれるか | 含まれない(記録ファイルには残る)。そのため記録ファイルから読み足す |
+| `/export-usage`・`/export-usage <パス>`・`/export-usage html` | 前の 2 つは `/export usage` と同じ出力。`html` は警告だけ。モデル呼び出しは 0 |
+| 拡張のコマンドに引数のヒント(組み込みの `input: { hint, choices }`)を付けられるか | 付けられない。定義に足しても、ランタイムが一覧に渡す情報から落とされる(名前と説明だけが残る) |
+| マーケットプレイス(agent-toolkit と同じ並びの手元のフォルダ)を `copilot plugin marketplace add` で足し、`copilot plugin install copilot-session-export@agent-toolkit` | 入る。`settings.json` の `enabledPlugins` に記録される |
+| プラグインで入れて、機能フラグなし / あり | なしでは読み込まれない。ありでは `/export`・`/export-usage`・`/save-session` が出て、3 つとも実行できる(モデル呼び出しは 0) |
+| 前の版の置き場(`extensions\session-export`)とプラグインの両方にあるとき | コマンドは 1 つずつしか出ないが、どちらの版が動くか分かりにくいので、`install.bat` の 1 で前の版の置き場を消す |
+| パスを直接指定した `copilot plugin install <フォルダ>` | 入るが、「直接のインストールは非推奨。今後は plugin@marketplace だけになる」と警告が出る。そのためマーケットプレイス経由にした |
 
 デスクトップ アプリ(GitHub Copilot app、ランタイム 1.0.99-2)の画面でも試した。
 
@@ -133,6 +201,9 @@ Copilot CLI 1.0.99-2(デスクトップ アプリが使っているランタイ�
 | 1 往復したセッションの入力欄に `/ex` と打つ | アプリ独自の `/export-gist` などと並んで、拡張の `/export` と `/save-session` が説明付きで出る |
 | 一覧から `/export` を選んで実行 | 作業フォルダに `copilot-session-<ID>.md` ができ、確認ダイアログが出る。Accept でエクスプローラーが開く |
 | そのときのモデル呼び出しと記録 | 使用量の記録の行数は前後で同じ。セッションの記録にも依頼・応答・ダイアログは増えない |
+| 一覧から `/export` を選び、引数に `usage` と打って実行 | `copilot-session-<ID>-usage.md` ができ、合計(0.82 AI クレジット、2 回)と返答ごとの行が 2 つ付く。モデル呼び出しは 0 |
+| 一覧から `/save-session` を選んで実行 | `%USERPROFILE%\copilot-sessions\<日付>\` に書き出され、合計が `/export usage` と一致。モデル呼び出しは 0 |
+| 拡張を差し替えたあと、開いていたセッションで `/restart-session` | 新しい版の拡張が読み込まれる(一覧の説明が新しいものに変わる) |
 | 新しいセッションの最初のメッセージとして `/export` を打つ | 依頼としてモデルに送られた(上の「新しいセッションの最初のメッセージには使えない」) |
 | アプリはセッションのログ(`session.info`)を画面に出すか | 出さない。そのため書き出した先は確認ダイアログで知らせる |
 
@@ -144,8 +215,7 @@ CLI 本物の出力は、`copilot --resume <ID> -i "/export file <パス>"` で�
 node --test tools/copilot-session-export/test/render-cli.test.mjs tools/copilot-session-export/test/render.test.mjs
 ```
 
-未確認: VS Code・Visual Studio の Copilot から使えるか。アプリの画面での `/save-session` と `/export usage` の実行
-(`/export` と同じ仕組みで、引数も同じ経路で渡る。画面なしの検証では動いている)。
+未確認: VS Code・Visual Studio の Copilot から使えるか。
 
 ## 仕組みと注意
 
@@ -153,10 +223,10 @@ node --test tools/copilot-session-export/test/render-cli.test.mjs tools/copilot-
   [Create an extension](https://docs.github.com/en/copilot/tutorials/create-an-extension))。拡張はセッションと別の Node.js のプロセスで動き、
   `joinSession({ commands })` で登録したスラッシュコマンドは、人が打ったときにそのプロセスの関数が呼ばれるだけで、モデルには渡らない。
 - 記録は `session.getEvents()`、使用量は `session.rpc.usage.getMetrics()`(どちらも SDK の API。後者は実験的)から読む。
-- `/export` の書式は、CLI がイベントから画面のタイムラインを組み、それを Markdown にする 2 段をなぞったもの(`session-export\render-cli.mjs`)。
+- `/export` の書式は、CLI がイベントから画面のタイムラインを組み、それを Markdown にする 2 段をなぞったもの(`plugin\extensions\session-export\render-cli.mjs`)。
   CLI の版上げで書式が変わることがあるので、そのときは上の方法で CLI 本物の出力を作って突き合わせる。
 - 拡張は実験的機能で、版上げで API や有効化の方法が変わることがある。機能フラグの名前と `settings.json` の読み方、
   組み込みと同じ名前の拡張コマンドの扱いは、Copilot CLI 1.0.100 に同梱のソースで確かめたもので、公式文書には書かれていない。
-- 拡張はあなたの権限で動く。ここにあるのは `session-export\` の 3 ファイルだけで、ネットワークには出ない。
+- 拡張はあなたの権限で動く。プラグインの中身は `plugin\plugin.json` と `plugin\extensions\session-export\` の 3 ファイルだけで、ネットワークには出ない。
 
 確認済みの環境: Windows 11、Copilot CLI 1.0.99-2 / 1.0.100、Node.js 24(2026-10)。

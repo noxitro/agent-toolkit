@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { test } from "node:test";
-import { outputPath, renderSession } from "../session-export/render.mjs";
+import { outputPath, renderSession } from "../plugin/extensions/session-export/render.mjs";
 
 const cwd = join(homedir(), "work", "repo");
 const ev = (type, data, extra = {}) => ({ type, data, id: Math.random().toString(36).slice(2), timestamp: "2026-10-22T01:00:00.000Z", ...extra });

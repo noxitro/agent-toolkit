@@ -4,8 +4,8 @@
 //                                   パスなし → 作業フォルダの copilot-session-<ID>.md、フォルダ → その中、.md → そのファイル。
 //                                   Copilot CLI(ターミナル)では組み込みの /export が優先され、この拡張のものは出ない。
 //                                   デスクトップ アプリなど、組み込みの /export が無いところで使う。
-// /export usage [パス]              上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足す。
-//                                   パスなし → 作業フォルダの copilot-session-<ID>-usage.md
+// /export-usage [パス]              上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足す。
+//                                   パスなし → 作業フォルダの copilot-session-<ID>-usage.md。/export usage [パス] でも同じ
 // /save-session [パス]             使用量(役 × モデルごとのクレジットとトークン)付きの記録を書き出す。
 //                                   パスなし → ~/copilot-sessions/<日付>/<時刻>_<ID 8 桁>.md
 //
@@ -69,41 +69,52 @@ function openFolder(file) {
   spawn(cmd, args, { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
 }
 
+// /export と /export-usage の本体。/export usage(引数での指定)も残す
+async function exportSession(ctx, forceUsage) {
+  const name = forceUsage ? "export-usage" : "export";
+  try {
+    const a = parseExportArgs(ctx.args);
+    if (a.unsupported) {
+      await tell(`/${name} ${a.unsupported} には対応していない(この拡張は file だけ)。/${name} [パス] で Markdown に書き出す。`, "warning");
+      return;
+    }
+    const usage = forceUsage || a.usage;
+    const now = new Date();
+    const events = await session.getEvents();
+    const cwd = lastCwd(events) || process.cwd();
+    const file = cliOutputPath(a.path, cwd, ctx.sessionId, { resolve, join, isAbsolute }, usage ? "-usage" : "");
+    let metrics = null;
+    if (usage) {
+      try {
+        metrics = await session.rpc.usage.getMetrics();
+      } catch {
+        // 使用量の API は実験的。取れなくても呼び出しごとの記録から合計を作る
+      }
+    }
+    const evs = usage ? withUsageRecords(events, ctx.sessionId) : events;
+    write(file, renderCliExport({ events: evs, sessionId: ctx.sessionId, now, cwd, withUsage: usage, metrics }));
+    await announce(`Session exported to: ${file}`, file);
+  } catch (err) {
+    await tell(`/${name} に失敗しました: ${err?.message ?? err}`, "error");
+  }
+}
+
 const session = await joinSession({
   commands: [
     {
+      // 拡張のコマンドには引数のヒント(組み込みの input)を付けられないので、説明文の先頭に引数を書く
       name: "export",
-      description: "Copilot CLI の /export file と同じ Markdown にセッションを書き出す(モデルは呼ばない)。引数: [usage] [パス](usage でトークンと AI クレジットも)",
-      handler: async (ctx) => {
-        try {
-          const a = parseExportArgs(ctx.args);
-          if (a.unsupported) {
-            await tell(`/export ${a.unsupported} には対応していない(この拡張は file だけ)。/export [file] [パス] で Markdown に書き出す。`, "warning");
-            return;
-          }
-          const now = new Date();
-          const events = await session.getEvents();
-          const cwd = lastCwd(events) || process.cwd();
-          const file = cliOutputPath(a.path, cwd, ctx.sessionId, { resolve, join, isAbsolute }, a.usage ? "-usage" : "");
-          let metrics = null;
-          if (a.usage) {
-            try {
-              metrics = await session.rpc.usage.getMetrics();
-            } catch {
-              // 使用量の API は実験的。取れなくても呼び出しごとの記録から合計を作る
-            }
-          }
-          const evs = a.usage ? withUsageRecords(events, ctx.sessionId) : events;
-          write(file, renderCliExport({ events: evs, sessionId: ctx.sessionId, now, cwd, withUsage: a.usage, metrics }));
-          await announce(`Session exported to: ${file}`, file);
-        } catch (err) {
-          await tell(`/export に失敗しました: ${err?.message ?? err}`, "error");
-        }
-      },
+      description: "[パス] — Copilot CLI の /export file と同じ Markdown にセッションを書き出す(モデルは呼ばない)",
+      handler: (ctx) => exportSession(ctx, false),
+    },
+    {
+      name: "export-usage",
+      description: "[パス] — /export に返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足して書き出す(モデルは呼ばない)",
+      handler: (ctx) => exportSession(ctx, true),
     },
     {
       name: "save-session",
-      description: "使用量付きのセッションの記録を Markdown に書き出す(モデルは呼ばない)。引数: 出力先のフォルダか .md のパス",
+      description: "[フォルダか .md のパス] — 使用量付きの読みやすいセッションの記録を Markdown に書き出す(モデルは呼ばない)",
       handler: async (ctx) => {
         try {
           const now = new Date();
