@@ -225,6 +225,7 @@ harness:                  # 任意。ハーネスごとの逃げ道
 | ツール | 内容 |
 | --- | --- |
 | [`copilot-usage-export`](tools/copilot-usage-export/README.md) | GitHub Copilot が PC に残す記録から、セッション × 役ごとの消費(CSV)と、依頼・応答・ツール呼び出し・サブエージェントへの委譲を追えるセッションごとの記録(Markdown)を書き出す。Windows 用、モデルを呼ばないのでクレジットを使わない |
+| [`copilot-session-export`](tools/copilot-session-export/README.md) | GitHub Copilot の拡張。デスクトップ アプリでも、Copilot CLI の `/export` と同じ Markdown(と使用量付きの記録)をセッションの中からその場で書き出す `/export` `/save-session` を足す。モデルを呼ばないのでクレジットを使わない |
 
 ## スクリプト
 
