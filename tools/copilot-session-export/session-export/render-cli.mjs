@@ -60,12 +60,21 @@ function withModel(args, d) {
   return { ...args, model: m };
 }
 
+// 使用量は返答の本文(無ければその返答の最後の項目)に付ける
+function attachUsage(made, usage) {
+  const target = made.find((x) => x.k === "copilot") ?? made[made.length - 1];
+  (target.usage ??= []).push(usage);
+}
+
 const abortTool = (x) => Object.assign(x, { done: true, rtype: "failure", log: "Operation aborted by user" });
 
-export function buildTimeline(events) {
+// withUsage: 呼び出しごとの使用量(session.usage_record)を返答の項目に付ける(/export usage 用。CLI の /export には無い)
+export function buildTimeline(events, { withUsage = false } = {}) {
   const list = [];
   const idx = new Map(); // toolCallId → 項目
   const msgs = new Map(); // 親 toolCallId|messageId → 応答の項目
+  const calls = new Map(); // apiCallId → その返答から作った項目
+  const pending = new Map(); // apiCallId → 返答より先に来た使用量
   // サブエージェントの最初の出力が届いたら、委譲したツールの項目をまとまり(group)に変える
   const group = (p) => {
     const x = idx.get(p);
@@ -93,6 +102,7 @@ export function buildTimeline(events) {
           box = g.children;
         }
         const mk = `${p}|${str(d.messageId)}`;
+        const made = []; // この返答から作った項目(使用量を付ける先を選ぶため)
         // 推論は本文とツールより前に置く(CLI の /export は本体の推論を出し、サブエージェントの推論は出さない)
         const rt = str(d.reasoningText);
         if (rt && !p) {
@@ -102,6 +112,7 @@ export function buildTimeline(events) {
             msgs.set(`r|${mk}`, it);
             box.push(it);
           }
+          made.push(msgs.get(`r|${mk}`));
         }
         const c = str(d.content);
         if (c) {
@@ -111,6 +122,7 @@ export function buildTimeline(events) {
             msgs.set(mk, it);
             box.push(it);
           }
+          made.push(msgs.get(mk));
         }
         for (const r of d.toolRequests ?? []) {
           if (!r) continue;
@@ -119,7 +131,22 @@ export function buildTimeline(events) {
           const it = { k: "tool", ts, callId: cid, name: str(r.name), title: r.toolTitle, intent: r.intentionSummary, args: r.arguments, done: false, nested: !!p };
           idx.set(cid, it);
           box.push(it);
+          made.push(it);
         }
+        if (withUsage && d.apiCallId && made.length) {
+          const id = str(d.apiCallId);
+          calls.set(id, made);
+          for (const u of pending.get(id) ?? []) attachUsage(made, u);
+          pending.delete(id);
+        }
+        break;
+      }
+      case "session.usage_record": {
+        // 呼び出し 1 回の使用量。記録では返答(assistant.message)より先に来るので、返答が来るまで預かる
+        if (!withUsage) break;
+        const id = str(d.usage?.apiCallId);
+        if (calls.has(id)) attachUsage(calls.get(id), d.usage);
+        else pending.set(id, [...(pending.get(id) ?? []), d.usage]);
         break;
       }
       case "tool.user_requested": {
@@ -313,7 +340,69 @@ function toolEntry(x, cwd) {
   return h;
 }
 
+// --- /export usage: 呼び出しごとの使用量と合計(CLI の /export には無い部分) ---
+
+const num = (n) => (typeof n === "number" ? n.toLocaleString("en-US") : "0");
+const credits = (nano) => (typeof nano === "number" ? (nano / 1e9).toFixed(2) : "-");
+const usageLine = (u) =>
+  `<sub>Usage: ${u.model ?? "?"} · in ${num(u.inputTokens)} (cache read ${num(u.cacheReadTokens)} / write ${num(u.cacheWriteTokens)}) · out ${num(u.outputTokens)} · reasoning ${num(u.reasoningTokens)} · ${credits(u.copilotUsage?.totalNanoAiu)} AI credits · ${((u.duration ?? 0) / 1000).toFixed(1)}s</sub>`;
+
+// 役(main と委譲先のエージェント)× モデルごとの合計。呼び出しごとの記録が無い古いセッションは、ランタイムの集計(metrics)から作る
+function usageSummary(events, metrics) {
+  const names = new Map();
+  for (const e of events) if (e.type === "subagent.started" && e.agentId) names.set(e.agentId, e.data?.agentDisplayName || e.data?.agentName || e.agentId);
+  const rows = new Map();
+  for (const e of events) {
+    if (e.type !== "session.usage_record") continue;
+    const u = e.data?.usage ?? {};
+    const role = e.agentId ? names.get(e.agentId) ?? e.agentId : "main";
+    const key = `${role}\u0000${u.model}`;
+    const r = rows.get(key) ?? { role, model: u.model ?? "?", calls: 0, nano: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0 };
+    r.calls++;
+    r.nano += u.copilotUsage?.totalNanoAiu ?? 0;
+    r.input += u.inputTokens ?? 0;
+    r.cacheRead += u.cacheReadTokens ?? 0;
+    r.cacheWrite += u.cacheWriteTokens ?? 0;
+    r.output += u.outputTokens ?? 0;
+    r.reasoning += u.reasoningTokens ?? 0;
+    rows.set(key, r);
+  }
+  let source = "per-call records in this session";
+  if (!rows.size && metrics) {
+    source = "the runtime's session totals (this session has no per-call records)";
+    const roles = metrics.agentMetrics && Object.keys(metrics.agentMetrics).length ? metrics.agentMetrics : { main: { modelMetrics: metrics.modelMetrics } };
+    for (const [role, a] of Object.entries(roles)) {
+      for (const [model, mm] of Object.entries(a.modelMetrics ?? {})) {
+        const u = mm.usage ?? {};
+        rows.set(`${role}\u0000${model}`, { role, model, calls: mm.requests?.count ?? 0, nano: mm.totalNanoAiu ?? 0, input: u.inputTokens ?? 0, cacheRead: u.cacheReadTokens ?? 0, cacheWrite: u.cacheWriteTokens ?? 0, output: u.outputTokens ?? 0, reasoning: u.reasoningTokens ?? 0 });
+      }
+    }
+  }
+  if (!rows.size) return "### Usage\n\nNo usage was recorded for this session.\n\n---\n\n";
+  const all = [...rows.values()];
+  const total = all.reduce((t, r) => ({ calls: t.calls + r.calls, nano: t.nano + r.nano }), { calls: 0, nano: 0 });
+  const lines = [
+    "### Usage",
+    "",
+    `**${credits(total.nano)} AI credits** in ${num(total.calls)} model calls (from ${source}).`,
+    "",
+    "| Role | Model | Calls | AI credits | Input | Cache read | Cache write | Output | Reasoning |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...all.map((r) => `| ${r.role} | ${r.model} | ${num(r.calls)} | ${credits(r.nano)} | ${num(r.input)} | ${num(r.cacheRead)} | ${num(r.cacheWrite)} | ${num(r.output)} | ${num(r.reasoning)} |`),
+    "",
+    "---",
+    "",
+    "",
+  ];
+  return lines.join("\n");
+}
+
 function entry(x, cwd) {
+  const body = entryBody(x, cwd);
+  return x.usage ? `${body.replace(/\n+$/, "\n")}\n${x.usage.map(usageLine).join("\n\n")}\n` : body;
+}
+
+function entryBody(x, cwd) {
   switch (x.k) {
     case "user":
       return `### User\n\n${esc(x.text)}\n`;
@@ -373,9 +462,11 @@ function redact(s) {
 
 // cwd はパスを相対にする基準。CLI は書き出す時点の作業フォルダを使うので、呼び出し側が渡す
 // (省略すると、記録にある最後の作業フォルダ)
-export function renderCliExport({ events, sessionId, now = new Date(), cwd }) {
+// withUsage: /export usage。各返答の下に呼び出しごとの使用量を、冒頭に役 × モデルごとの合計を足す
+// (metrics は呼び出しごとの記録が無いときの合計の出どころ)。省略すると CLI の /export と同じ出力
+export function renderCliExport({ events, sessionId, now = new Date(), cwd, withUsage = false, metrics = null }) {
   const startEv = events.find((e) => e.type === "session.start")?.data ?? {};
-  const list = buildTimeline(events);
+  const list = buildTimeline(events, { withUsage });
   cwd ??= lastCwd(events);
   const start = new Date(startEv.startTime ?? list[0]?.ts ?? events[0]?.timestamp ?? now);
   const head = [
@@ -392,15 +483,34 @@ export function renderCliExport({ events, sessionId, now = new Date(), cwd }) {
     "",
   ].join("\n");
   const body = list.map((x) => `<sub>${clock(Math.max(0, (new Date(x.ts) - start) / 1000))}</sub>\n\n${entry(x, cwd)}`).join("\n---\n\n");
-  return redact(head + body) + "\n---\n\n<sub>Generated by [GitHub Copilot CLI](https://github.com/features/copilot/cli)</sub>\n";
+  const summary = withUsage ? usageSummary(events, metrics) : "";
+  return redact(head + summary + body) + "\n---\n\n<sub>Generated by [GitHub Copilot CLI](https://github.com/features/copilot/cli)</sub>\n";
 }
 
-// 引数なし → 作業フォルダの copilot-session-<ID>.md(CLI の /export file と同じ)。フォルダ → その中に同じ名前。
-// .md → そのファイル。相対パスはセッションの作業フォルダから解決する
-export function cliOutputPath(arg, cwd, sessionId, { resolve, join, isAbsolute }) {
-  const name = `copilot-session-${sessionId}.md`;
+// 引数なし → 作業フォルダの copilot-session-<ID>.md(CLI の /export file と同じ。suffix があれば名前の末尾に足す)。
+// フォルダ → その中に同じ名前。.md → そのファイル。相対パスはセッションの作業フォルダから解決する
+export function cliOutputPath(arg, cwd, sessionId, { resolve, join, isAbsolute }, suffix = "") {
+  const name = `copilot-session-${sessionId}${suffix}.md`;
   const a = str(arg).trim().replace(/^["']|["']$/g, "");
   if (!a) return join(cwd, name);
   const p = isAbsolute(a) ? a : resolve(cwd, a);
   return /\.md$/i.test(p) ? p : join(p, name);
+}
+
+// /export の引数。CLI の /export は「file [session|research] [パス]」。ここでは file(と session)と、独自の usage を受ける
+export function parseExportArgs(args) {
+  const words = str(args).trim().split(/\s+/).filter(Boolean);
+  const sub = words[0]?.toLowerCase();
+  if (["html", "gist", "link", "off", "research"].includes(sub)) return { unsupported: sub };
+  let usage = false;
+  const take = (w) => {
+    if (words[0]?.toLowerCase() !== w) return false;
+    words.shift();
+    return true;
+  };
+  if (take("usage")) usage = true;
+  take("file");
+  if (take("usage")) usage = true;
+  take("session");
+  return { path: words.join(" "), usage };
 }

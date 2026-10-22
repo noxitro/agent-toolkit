@@ -6,6 +6,7 @@ GitHub Copilot のデスクトップ アプリでも、Copilot CLI の `/export`
 | コマンド | 書き出すもの |
 | --- | --- |
 | `/export [file] [パス]` | Copilot CLI の `/export file` と同じ Markdown(CLI 本物の出力と突き合わせて確かめた) |
+| `/export usage [パス]` | 上と同じ Markdown に、返答ごとのトークンと AI クレジット、役 × モデルごとの合計を足したもの |
 | `/save-session [パス]` | 使用量(役 × モデルごとの AI クレジットとトークン)付きの、読みやすい記録 |
 
 ## 目的
@@ -30,6 +31,7 @@ Copilot CLI(ターミナル)には組み込みの `/export` がある。しか�
 **新しいセッションの最初のメッセージには使えない。** 拡張はセッションができてから読み込まれるので、新しいセッションの入力欄に最初に打った
 `/export` は、ただの依頼としてモデルに送られる(トークンを使う)。1 往復以上したセッションで、入力欄に `/` を打って一覧から選ぶ。
 一覧に `/export`(説明が「Copilot CLI の /export file と同じ…」のもの)が出ないときは送らない。
+
 必要なもの: Windows 10 / 11 の標準の PowerShell 5.1(インストーラー)。拡張そのものは Copilot が起動する Node.js のプロセスで動き、
 外部のパッケージは使わない(Node.js の標準モジュールと、Copilot が渡す SDK だけ)。
 
@@ -64,6 +66,23 @@ CLI の `/export` と違うところ(どちらも記録に残らないもの):
 
 - CLI の画面にだけ出た表示(「Tip: /share」のようなヒント、シェルの途中出力、フックの進捗)は入らない。
 - 所要時間と書き出した時刻は、この拡張で書き出した時点のもの。
+
+### /export usage(トークンと AI クレジット付き)
+
+`/export` を一覧から選び、引数に `usage` と打つ(`/export usage <パス>`、`/export file usage <パス>` でもよい)。
+パスなしの書き出し先は、作業フォルダの `copilot-session-<セッション ID>-usage.md`(CLI と同じ形式のファイルと名前を分ける)。
+`usage` を付けない `/export` の出力は、CLI と同じまま変わらない。
+
+`/export` の出力に次の 2 つを足す。
+
+- 冒頭の `### Usage`: セッション全体の AI クレジットと呼び出し回数、役(main と委譲先のエージェント)× モデルごとの呼び出し回数・AI クレジット・
+  入力・キャッシュ読み・キャッシュ書き・出力・推論のトークン
+- 各返答の下の 1 行: `<sub>Usage: モデル · in 入力 (cache read キャッシュ読み / write キャッシュ書き) · out 出力 · reasoning 推論 · AI クレジット · 所要時間</sub>`。
+  本文の無い返答(ツールを呼んだだけのもの)は、その返答の最後のツールの下に付く。委譲先の呼び出しは、委譲のまとまりの中に付く
+
+数字の出どころは、ランタイムが呼び出しごとに記録ファイル(`session-state\<ID>\events.jsonl`)に残す `session.usage_record`。
+このイベントはセッションの API(`getEvents()`)には含まれないので、拡張が記録ファイルから読み足す。
+呼び出しごとの記録が無い古いセッションでは、返答ごとの行は付かず、合計だけをランタイムの集計(`usage.getMetrics()`)から出す(出どころを合計の行に書く)。
 
 ### /save-session
 
@@ -102,6 +121,10 @@ Copilot CLI 1.0.99-2(デスクトップ アプリが使っているランタイ�
 | 環境変数 `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` だけ | 読み込まれる。設定ファイルは書き換わらない |
 | `--experimental` を付けて起動 | 読み込まれるが、`settings.json` に `"experimental": true` が保存される |
 | 手元の 158 セッションの記録(events.jsonl)を両形式で描画 | 失敗 0 |
+| `/export usage` の実行(記録のあるセッション) | 返答ごとの行が記録の数だけ付き、合計がランタイムの集計(`getMetrics()`)と一致。モデル呼び出しは 0 |
+| `/export usage` を足したあとの `usage` なしの `/export` | 手元の 156 セッションで、足す前の版と出力がバイト単位で同じ |
+| 呼び出しごとの記録がある 17 セッションを `usage` 付きで描画 | 17 件すべてで、返答ごとの行の数が記録の数と一致 |
+| `getEvents()` に `session.usage_record` が含まれるか | 含まれない(記録ファイルには残る)。そのため記録ファイルから読み足す |
 
 デスクトップ アプリ(GitHub Copilot app、ランタイム 1.0.99-2)の画面でも試した。
 
@@ -121,7 +144,8 @@ CLI 本物の出力は、`copilot --resume <ID> -i "/export file <パス>"` で�
 node --test tools/copilot-session-export/test/render-cli.test.mjs tools/copilot-session-export/test/render.test.mjs
 ```
 
-未確認: VS Code・Visual Studio の Copilot から使えるか。アプリでの `/save-session` の実行(`/export` と同じ仕組みで、画面なしの検証では動いている)。
+未確認: VS Code・Visual Studio の Copilot から使えるか。アプリの画面での `/save-session` と `/export usage` の実行
+(`/export` と同じ仕組みで、引数も同じ経路で渡る。画面なしの検証では動いている)。
 
 ## 仕組みと注意
 
