@@ -48,3 +48,16 @@ global の git フック (noxitro/github-templates の `git-hooks/`) が、commi
 該当があれば直してから進める。迷う記述は入れずにユーザーに確認する。
 
 検査に掛かったときは、誤検出なら `.githooks-allow` にパスと理由を足す。`--no-verify` では通さない。
+
+CI (`.github/workflows/`) は PR と main への push で次を見る。手元のフックが走らない経路
+(クラウドのセッション、外からの PR) の歯止めでもあるので、main のルールセットで必須チェックにする。
+
+| チェック名 | 中身 |
+| --- | --- |
+| `Validate and check generated output` | 共有資産の検証、生成物が `shared/` と一致するか、`npm test` |
+| `Installer on Windows` | Windows PowerShell 5.1 でのインストーラー |
+| `File format` | リポジトリ内は LF、BOM は非 ASCII を含む `.ps1` だけ、`.bat` は ASCII (`npm run format:check`) |
+| `Markdown lint` | markdownlint |
+| `scan / Scan` | 秘密情報 (共通ワークフロー) |
+
+`.github/` を変えたときは `actionlint` (Workflow lint) も走る。Dependabot が actions と npm の更新を週 1 回 PR にする。

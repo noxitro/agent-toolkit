@@ -1,0 +1,24 @@
+# Weekly update PRs for the GitHub Actions the workflows use and for the npm dependencies.
+# Free for public repositories.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    # One PR per week for all action updates, so the workflows move together.
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"
+    groups:
+      npm:
+        patterns: ["*"]
