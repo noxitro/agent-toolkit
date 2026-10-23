@@ -18,11 +18,11 @@ jobs:
     name: Validate and check generated output
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -47,11 +47,11 @@ jobs:
     name: Installer on Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Test the Node and PowerShell installers
         run: node --test tests/install-assets.test.mjs
@@ -63,11 +63,27 @@ jobs:
         shell: powershell
         run: .\tests\windows-no-symlink\run.ps1
 
+  # LF in the repository, a BOM only on PowerShell scripts that need one, ASCII batch files.
+  # Editors and shell tools on Windows quietly break these (CRLF, a stripped or added BOM),
+  # and the diff then covers every line. Rules: scripts/check-file-format.mjs.
+  file-format:
+    name: File format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Line endings, BOM and batch-file encoding
+        run: node scripts/check-file-format.mjs
+
   markdown:
     name: Markdown lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: DavidAnson/markdownlint-cli2-action@v19
         with:
