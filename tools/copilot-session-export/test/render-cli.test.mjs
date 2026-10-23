@@ -3,7 +3,7 @@
 // 期待値の書式は、実際の CLI(1.0.100)の /export の出力と突き合わせて決めたもの。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTimeline, cliOutputPath, parseExportArgs, renderCliExport } from "../session-export/render-cli.mjs";
+import { buildTimeline, cliOutputPath, parseExportArgs, renderCliExport } from "../plugin/extensions/session-export/render-cli.mjs";
 import { isAbsolute, join, resolve } from "node:path";
 
 const cwd = "/work/repo";

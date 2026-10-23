@@ -1,0 +1,15 @@
+{
+  "name": "agent-toolkit",
+  "owner": { "name": "nitro", "url": "https://github.com/noxitro" },
+  "metadata": {
+    "description": "GitHub Copilot plugins from agent-toolkit (the Claude Code marketplace is .claude-plugin/marketplace.json)."
+  },
+  "plugins": [
+    {
+      "name": "copilot-session-export",
+      "source": "./tools/copilot-session-export/plugin",
+      "description": "Adds /export, /export-usage and /save-session: write the current session to Markdown (the same format as Copilot CLI /export, optionally with per-response tokens and AI credits) without calling the model.",
+      "version": "0.2.0"
+    }
+  ]
+}
