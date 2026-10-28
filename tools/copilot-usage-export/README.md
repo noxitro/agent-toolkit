@@ -19,12 +19,26 @@ GitHub Copilot(Copilot CLI と、同じ記録を使うデスクトップ版)が 
 | 直近 7 日に動いたセッションを書き出す | `copilot-usage-export.bat` をダブルクリック |
 | 日付を指定する(UTC) | `copilot-usage-export.bat -Since 2026-10-19` |
 | 特定のセッションだけ | `copilot-usage-export.bat -SessionId <ID の先頭数文字>` |
+| 一覧から番号で選んで書き出す | `copilot-usage-export-pick.bat` をダブルクリック(= `copilot-usage-export.bat -Pick`。下の「番号で選ぶ」) |
 | ツールの結果も記録に入れる | `copilot-usage-export.bat -ToolOutput all`(既定は `fail` = 失敗したときだけ。`none` で入れない) |
+| 記録を Copilot CLI の `/share file` と同じ形式で出す | `copilot-usage-export-cli.bat` をダブルクリック(= `copilot-usage-export.bat -Format cli`。両方出すなら `-Format both`) |
 | 生の記録(events.jsonl)も複製する | `copilot-usage-export.bat -Raw`(`output\raw\` へ) |
 | 出力先を変える | `copilot-usage-export.bat -OutDir <出力先のフォルダ>` |
 | 毎日自動で動かす | `copilot-usage-export-schedule.bat` をダブルクリックし、1 を選ぶ(時刻を聞かれるので HH:mm で答える。毎日その時刻に実行し、PC が止まっていたら次に起動したとき。いまのユーザーで登録し、管理者権限は要らない) |
 
 必要なもの: Windows 10 / 11 の標準の PowerShell 5.1 だけ(Node.js や Python は不要。SQLite は Windows 同梱の `winsqlite3.dll` を使う)。
+
+### 番号で選ぶ(`-Pick`)
+
+`-Since` の期間(既定は直近 7 日)に動いたセッションを、開始の古い順に番号付きで一覧にする。
+列は番号・開始(現地時刻)・リポジトリ/フォルダ・題名・クレジット。
+
+1. 書き出す番号を `1,3,5` や `2-4`(組み合わせて `1,4-6` も可)の形で入力する
+2. `-Format` を付けていなければ形式を聞かれる: `1` = 記録(既定。Enter だけでも同じ)/ `2` = Copilot CLI の形式 / `3` = 両方
+
+選んだセッションだけを書き出す(CSV も選んだセッションの行だけを差し替える)。
+何も入力しなければ何も書かずに終わる。範囲外の番号や形の崩れた入力も、何も書かずに終了コード 1 で終わる。
+番号を入力する作りなので、`-Quiet`(自動実行)とは一緒に使えない(指定するとエラーで止まる)。
 
 ## 出すもの
 
@@ -33,7 +47,8 @@ GitHub Copilot(Copilot CLI と、同じ記録を使うデスクトップ版)が 
 | ファイル | 中身 |
 | --- | --- |
 | `output\usage-<日付>.csv` | 日ごとの CSV(セッションの開始日で分ける)。再実行すると同じセッションの行を差し替えるので、何度動かしても重複しない |
-| `output\sessions\<日付>\<時刻>_<ID 8 桁>.md` | セッションごとの記録 |
+| `output\sessions\<日付>\<時刻>_<ID 8 桁>.md` | セッションごとの記録(`-Format record`(既定)と `both` のとき) |
+| `output\cli\<日付>\copilot-session-<ID>.md` | セッションごとの記録を Copilot CLI の書き出しと同じ形式で(`-Format cli` と `both` のとき) |
 | `output\copilot-usage-export.log` | 自動実行のときの結果 |
 
 ### セッションごとの記録
@@ -47,10 +62,35 @@ GitHub Copilot(Copilot CLI と、同じ記録を使うデスクトップ版)が 
 
 入れないもの: システムプロンプト、スキルの本文、モデル内部の推論、成功したツールの結果(`-ToolOutput all` で入る)。
 
+### Copilot CLI の形式(`-Format cli`)
+
+Copilot CLI の `/share file`(別名 `/export file`)が出す Markdown と同じ組み立てで、
+記録(events.jsonl)から書き出す。CLI でその場で書き出し忘れたセッションも、後から同じ形で残せる。
+CSV はどの形式でも出す。
+
+- 冒頭に `# Copilot CLI Session` と、セッション ID・開始・所要時間・書き出した時刻の注記
+- 項目ごとに `---` で区切り、開始からの経過(`<sub>1m 5s</sub>`)のあとに `### User` / `### Copilot` / ``### `ツール名` ``
+- ツールは意図の要約(太字)、引数(grep・glob・view・edit・create は 1 行、他は `Arguments` を折りたたんだ JSON)、
+  結果(5 行を超えると折りたたむ)。失敗は見出しに `— Failed`
+- サブエージェントの動きは、委譲したツールの見出し(`### task (Completed)`)の下にまとめる
+- エラー・情報・警告・会話の要約・完了の報告・通知も CLI と同じ見出しで出す
+- `-ToolOutput` は効かない(CLI と同じく、ツールの結果は常に入る)
+
+CLI の書き出しと違うところ:
+
+- モデル内部の推論(`### Reasoning`)は入れない
+- 所要時間は最後の出来事まで(CLI は書き出した時点まで)。書き出した時刻は、このツールを動かした時刻
+- 末尾の 1 行は、このツールが書き出したことと秘密情報の疑いの件数
+- 実行中だけ見えるもの(シェルの途中出力・フックの進捗・画像)は記録に残らないので出ない
+- コードの外の `<` を `\<` にする規則は、CLI の Markdown 解析を簡略化したもの(コードブロックとインラインコードは残す)
+- events.jsonl が無いセッションは出さない
+
+形式は Copilot CLI 1.0.100 に同梱のソース(書き出しとタイムラインの組み立て)で確かめた。CLI の版上げで形が変わることがある。
+
 ### 秘密情報の警告
 
 記録は書き換えない。ただ、エージェントが設定ファイルを読んだ結果などで API キーやトークンが入ることがあるので、
-それらしい文字列を数えて**警告だけ出す**(画面かログに該当ファイルと種類、各記録の末尾に件数)。警告が出たら中身を確認し、
+それらしい文字列を数えて**警告だけ出す**(画面かログに該当ファイルと種類、各記録の末尾に件数。CLI の形式でも同じ)。警告が出たら中身を確認し、
 本物なら記録から消して鍵を作り直す。
 
 ## CSV の列
