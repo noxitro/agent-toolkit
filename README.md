@@ -19,7 +19,8 @@
 | 配布 | プラグイン マーケットプレイス | `~/.config/opencode/` へコピー | `.github/` へコピー |
 
 ハーネスごとの詳細、バージョン要件、既知の罠は [docs/harness-notes.md](docs/harness-notes.md) を
-参照。
+参照。チームで生成 AI の活用を進めるときに、この toolkit とその周りの道具で何ができるかは
+[docs/use-cases.md](docs/use-cases.md) にまとめてある。
 
 **Codex**(OpenAI)はビルドの対象外。スキルは同じ Agent Skills の仕様(`SKILL.md` に `name` と
 `description`)なので、`plugins/toolkit-core/skills/` を `~/.agents/skills/` にコピーすればそのまま読まれる。
@@ -46,7 +47,7 @@ install.bat                       Windows 用のインストーラ(scripts/insta
 tests/                            スキルに同梱するスクリプトの単体テスト
 tools/                            単体のツール(ビルドの対象外。フォルダごとコピーして使う)
 toolkit.config.json               リポジトリごとのビルド設定
-docs/                             ハーネスごとのメモ
+docs/                             ハーネスごとのメモ、活用のしかた
 ```
 
 `scripts/` と `toolkit.config.json` は、同じツールチェーンを姉妹リポジトリ(公開前の資産を

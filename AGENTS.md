@@ -30,7 +30,7 @@
 - 新しい資産は、非公開のインキュベーション用リポジトリ (noxitro/agent-toolkit-private) の `shared/` で運用して
   形が固まってから、ファイルをこちらの `shared/` にコピーして持ち込む。git の履歴は持ち込まない
   (非公開側の履歴やコミットメッセージには組織の文脈が混ざりうる)。
-- `docs/copilot-harness/`、`tools/copilot-usage-export/`、`tools/copilot-session-export/`、`.github/plugin/`(Copilot 用のマーケットプレイス)は、別の非公開リポジトリで一般化した写しを、そこの
+- `docs/use-cases.md`、`tools/copilot-usage-export/`、`tools/copilot-session-export/`、`.github/plugin/`(Copilot 用のマーケットプレイス)は、別の非公開リポジトリで一般化した写しを、そこの
   禁止語検査に通してから持ち込む。ここで直接書き足さない。持ち主の clone では、その置き場の追加行と
   コミットメッセージを禁止語に照合する pre-push が、共通フックのあとに走る。
 - 外から PR を受けた場合は、上の基準で差分を読んでから持ち主がマージする。
