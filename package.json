@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -16,7 +16,8 @@
     "assets": "node scripts/install-assets.mjs",
     "assets:check": "node scripts/install-assets.mjs --check",
     "links": "node scripts/install-assets.mjs --link",
-    "test": "node --test"
+    "test": "node --test",
+    "format:check": "node scripts/check-file-format.mjs"
   },
   "dependencies": {
     "yaml": "^2.6.1"

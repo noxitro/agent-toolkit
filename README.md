@@ -88,7 +88,7 @@ docs/                             ハーネスごとのメモ、活用のしか�
 | OS | 実行するもの | 必要なもの |
 | --- | --- | --- |
 | Windows 10 / 11 | `install.bat`(中身は `scripts/install-assets.ps1`) | なし(Windows に入っている PowerShell 5.1 で動く) |
-| macOS / Linux | `node scripts/install-assets.mjs` | Node.js 20 以上(`npm ci` は不要) |
+| macOS / Linux | `node scripts/install-assets.mjs` | Node.js 22 以上(`npm ci` は不要) |
 
 1. [リリース](https://github.com/noxitro/agent-toolkit/releases)の「Source code (zip)」をダウンロード
    する(または `git clone`)。
